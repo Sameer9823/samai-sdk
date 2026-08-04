@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>samai-sdk — one runtime, eight providers</title>
+<meta name="description" content="samai-sdk: a unified TypeScript agent SDK across OpenAI, Anthropic, Google, Groq, Mistral, Ollama, Azure and Bedrock — tool calling, MCP, handoffs, guardrails, RAG, structured output, sessions, tracing and more, built in.">
+<meta name="theme-color" content="#0B1120">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230B1120'/%3E%3Ccircle cx='16' cy='16' r='6' fill='none' stroke='%235EEAD4' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='2' fill='%235EEAD4'/%3E%3C/svg%3E">
+<!-- Open Graph / social preview -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="samai-sdk — one runtime, eight providers">
+<meta property="og:description" content="A unified TypeScript agent SDK: OpenAI, Anthropic, Google, Groq, Mistral, Ollama, Azure and Bedrock behind one Provider interface — with a real agent runtime, guardrails, MCP, RAG, structured output, sessions and tracing built in.">
+<meta property="og:url" content="https://samai-sdk.vercel.app/">
+<meta property="og:site_name" content="samai-sdk">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="samai-sdk — one runtime, eight providers">
+<meta name="twitter:description" content="A unified TypeScript agent SDK across 8 model providers — real agent runtime, guardrails, MCP, RAG, structured output, sessions and tracing built in.">
+<link rel="canonical" href="https://samai-sdk.vercel.app/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    color-scheme: dark;
+    --bg: #0B1120;
+    --bg-raised: #101a2e;
+    --bg-inset: #0a0f1c;
+    --bg-hover: rgba(255,255,255,.045);
+    --line: #232f49;
+    --line-soft: #1a2338;
+    --text: #E7EBF3;
+    --text-dim: #93a1bd;
+    --text-faint: #5b6a8a;
+    --rail: #5EEAD4;         /* the one unifying line */
+    --rail-dim: #2f9c8c;
+    --rail-ink: #04231f;
+    --signal: #F5A623;       /* CTA warmth, "go" color */
+    --node-1: #7dd3fc;
+    --node-2: #c9a4ff;
+    --node-3: #f5716a;
+    --node-4: #8fe3a8;
+    --shadow: 0 24px 60px rgba(0,0,0,.45);
+    --glow-rail: 0 0 32px rgba(94,234,212,.35);
+    --glow-signal: 0 0 28px rgba(245,166,35,.3);
+    --display: "Space Grotesk", var(--sans);
+    --mono: "IBM Plex Mono", "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Helvetica, Arial, sans-serif;
+    --grid-line: rgba(94,234,212,.05);
+    --overlay-1: rgba(94,234,212,.10);
+    --overlay-2: rgba(245,166,35,.07);
+  }
+
+  /* ---- Light theme: same neon-rail identity, inverted for daylight legibility ---- */
+  html[data-theme="light"]{
+    color-scheme: light;
+    --bg: #F5F7FB;
+    --bg-raised: #FFFFFF;
+    --bg-inset: #EDF1F8;
+    --bg-hover: rgba(11,17,32,.04);
+    --line: #DCE3F0;
+    --line-soft: #E6EBF4;
+    --text: #0B1120;
+    --text-dim: #49546e;
+    --text-faint: #8592ab;
+    --rail: #0f9a89;
+    --rail-dim: #0c7c6e;
+    --rail-ink: #ffffff;
+    --signal: #c96a10;
+    --node-1: #0284c7;
+    --node-2: #8b5cf6;
+    --node-3: #e11d48;
+    --node-4: #16a34a;
+    --shadow: 0 24px 50px rgba(15,30,60,.10);
+    --glow-rail: 0 0 0 rgba(0,0,0,0);
+    --glow-signal: 0 0 0 rgba(0,0,0,0);
+    --grid-line: rgba(15,154,137,.07);
+    --overlay-1: rgba(15,154,137,.07);
+    --overlay-2: rgba(201,106,16,.06);
+  }
+  html[data-theme="light"] .btn-solid:hover{ background:#0c7c6e; border-color:#0c7c6e; box-shadow:none; }
+  html[data-theme="light"] .cx-trace{ opacity:.4; }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0; background:var(--bg); color:var(--text); font-family:var(--sans);
+    font-size:16px; line-height:1.6; -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+    transition:background-color .25s ease, color .25s ease;
+  }
+  a{color:inherit; text-decoration:none;}
+  code{font-family:var(--mono); background:var(--bg-inset); border:1px solid var(--line); border-radius:5px; padding:.15em .45em; font-size:.86em; color:var(--rail); word-break:break-word;}
+  ::selection{background:var(--rail); color:var(--rail-ink);}
+  img, svg{max-width:100%;}
+  .wrap{max-width:1180px; margin:0 auto; padding:0 28px;}
+  @media (max-width:640px){ .wrap{padding:0 18px;} }
+  @media (max-width:400px){ .wrap{padding:0 14px;} }
+
+  /* faint PCB-style grid, sits behind the whole page */
+  body::before{
+    content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 42px 42px;
+    -webkit-mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, #000 0%, transparent 72%);
+    mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, #000 0%, transparent 72%);
+    transition:background-image .25s ease;
+  }
+
+  /* small trace-line divider, used between sections as a recurring motif */
+  .trace-divider{ display:flex; align-items:center; gap:0; }
+  .trace-divider .line{ flex:1; height:1px; background:linear-gradient(90deg, transparent, var(--line-soft) 30%, var(--line-soft) 70%, transparent); }
+  .trace-divider .node{ width:6px; height:6px; border-radius:50%; background:var(--rail); margin:0 10px; box-shadow:0 0 10px rgba(94,234,212,.6); flex:none; }
+
+  /* ============ Nav ============ */
+  header.site-nav{
+    position:sticky; top:0; z-index:50; backdrop-filter: blur(10px);
+    background:color-mix(in srgb, var(--bg) 82%, transparent); border-bottom:1px solid var(--line-soft);
+    transition:background-color .25s ease, border-color .25s ease;
+  }
+  .nav-row{display:flex; align-items:center; justify-content:space-between; height:60px; gap:12px;}
+  .brand{display:flex; align-items:center; gap:9px; font-family:var(--mono); font-weight:600; font-size:1.02rem; flex:none;}
+  .brand .rail-dot{width:9px; height:9px; border-radius:50%; background:var(--rail); box-shadow:0 0 0 4px var(--rail-ink); flex:none;}
+  .nav-links{display:flex; align-items:center; gap:28px;}
+  .nav-links a{color:var(--text-dim); font-size:.92rem; transition:color .15s;}
+  .nav-links a:hover{color:var(--text);}
+  .nav-links a.docs-link{color:var(--text); display:inline-flex; align-items:center; gap:5px;}
+  .nav-links a.docs-link:hover{color:var(--rail);}
+  .nav-cta{display:flex; align-items:center; gap:12px; flex:none;}
+  .btn{
+    font-family:var(--mono); font-size:.86rem; font-weight:500; padding:8px 15px; border-radius:7px;
+    border:1px solid var(--line); display:inline-flex; align-items:center; gap:7px; cursor:pointer;
+    transition:border-color .15s, background .15s, transform .1s; white-space:nowrap;
+  }
+  .btn:hover{border-color:var(--text-faint); background:var(--bg-hover);}
+  .btn:active{transform:translateY(1px);}
+  .btn-solid{background:var(--rail); border-color:var(--rail); color:var(--rail-ink); font-weight:600; box-shadow:var(--glow-rail);}
+  .btn-solid:hover{background:#7ff0dd; border-color:#7ff0dd; box-shadow:0 0 40px rgba(94,234,212,.5);}
+
+  .nav-toggle{
+    display:none; align-items:center; justify-content:center; width:38px; height:38px;
+    border-radius:7px; border:1px solid var(--line); background:var(--bg-raised); color:var(--text);
+    cursor:pointer; flex:none; padding:0;
+  }
+  .nav-toggle:hover{border-color:var(--rail-dim);}
+  .nav-toggle svg{width:18px; height:18px; display:block;}
+  .nav-toggle .icon-close{display:none;}
+  .nav-toggle.open .icon-menu{display:none;}
+  .nav-toggle.open .icon-close{display:block;}
+
+  /* theme toggle */
+  .theme-toggle{
+    display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px;
+    border-radius:7px; border:1px solid var(--line); background:var(--bg-raised); color:var(--text-dim);
+    cursor:pointer; flex:none; padding:0; transition:border-color .15s, color .15s, background .15s, transform .15s;
+  }
+  .theme-toggle:hover{ border-color:var(--rail-dim); color:var(--rail); }
+  .theme-toggle:active{ transform:scale(.92); }
+  .theme-toggle svg{ width:17px; height:17px; display:block; }
+  .theme-toggle .icon-moon{ display:none; }
+  html[data-theme="light"] .theme-toggle .icon-sun{ display:none; }
+  html[data-theme="light"] .theme-toggle .icon-moon{ display:block; }
+
+  /* Github link text can shrink to icon-only on very small screens */
+  .btn.gh-link .gh-label{display:inline;}
+
+  @media (max-width:860px){
+    .nav-links{
+      position:absolute; top:60px; left:0; right:0; z-index:49;
+      flex-direction:column; align-items:flex-start; gap:2px;
+      background:var(--bg-raised); border-bottom:1px solid var(--line-soft);
+      padding:10px 28px 16px; box-shadow:var(--shadow);
+      max-height:0; overflow:hidden; opacity:0;
+      transition:max-height .25s ease, opacity .2s ease, padding .25s ease;
+    }
+    .nav-links.open{ max-height:320px; opacity:1; padding:14px 28px 20px; }
+    .nav-links a{ padding:10px 0; width:100%; border-bottom:1px solid var(--line-soft); font-size:1rem; }
+    .nav-links a:last-child{ border-bottom:none; }
+    .nav-toggle{display:inline-flex;}
+    .nav-cta .btn:not(.btn-solid){display:none;}
+  }
+  @media (max-width:420px){
+    .nav-cta .btn-solid{padding:8px 11px; font-size:.8rem;}
+  }
+
+  /* ============ Hero ============ */
+  .hero{padding:44px 0 0; position:relative; overflow:hidden;}
+  .hero::before{
+    content:""; position:absolute; inset:-20% -10% auto -10%; height:420px;
+    background: radial-gradient(60% 60% at 30% 20%, var(--overlay-1), transparent 70%),
+                radial-gradient(45% 45% at 80% 10%, var(--overlay-2), transparent 70%);
+    pointer-events:none;
+  }
+  .hero-grid{
+    display:grid; grid-template-columns:1.15fr 1fr; align-items:center; gap:40px;
+    padding-bottom:36px;
+  }
+  .eyebrow{
+    font-family:var(--mono); font-size:.78rem; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--rail); display:inline-flex; align-items:center; gap:9px; margin-bottom:16px;
+    padding:5px 12px 5px 10px; border:1px solid var(--rail-dim); border-radius:20px;
+    background:color-mix(in srgb, var(--rail) 8%, transparent);
+  }
+  .eyebrow::before{content:""; width:6px; height:6px; border-radius:50%; background:var(--rail); box-shadow:0 0 8px var(--rail); flex:none;}
+  h1.hero-head{
+    font-family:var(--display); font-weight:600; letter-spacing:-.02em; line-height:1.05;
+    font-size:clamp(1.85rem, 3.6vw, 3.3rem); margin:0 0 18px; color:var(--text);
+  }
+  h1.hero-head em{
+    font-style:normal; position:relative;
+    background:linear-gradient(100deg, var(--rail) 10%, var(--signal) 90%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .hero-sub{
+    font-size:1.06rem; color:var(--text-dim); margin:0 0 26px; line-height:1.6;
+  }
+  @media (max-width:520px){ .hero-sub{font-size:.98rem;} }
+  .hero-actions{display:flex; flex-wrap:wrap; align-items:center; gap:14px; margin-bottom:0;}
+  .install-pill{
+    display:flex; align-items:center; gap:12px; background:var(--bg-inset); border:1px solid var(--line);
+    border-radius:8px; padding:10px 8px 10px 16px; font-family:var(--mono); font-size:.9rem;
+    max-width:100%; overflow:hidden;
+  }
+  .install-pill .prompt{color:var(--text-faint); flex:none;}
+  .install-pill span#install-cmd, .install-pill > span:not(.prompt){
+    overflow-x:auto; white-space:nowrap; scrollbar-width:none;
+  }
+  .install-pill span::-webkit-scrollbar{display:none;}
+  .install-pill button{
+    background:var(--bg-raised); border:1px solid var(--line); color:var(--text-dim); border-radius:6px;
+    width:30px; height:30px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer;
+    flex:none;
+  }
+  .install-pill button:hover{color:var(--rail); border-color:var(--rail-dim);}
+  .install-pill.copied button{color:var(--rail);}
+  @media (max-width:480px){
+    .install-pill{font-size:.78rem; padding:9px 6px 9px 12px; width:100%;}
+    .hero-actions{gap:10px;}
+    .hero-actions .btn{flex:1 1 auto; justify-content:center;}
+  }
+
+  /* ---- Provider marquee: the signature element ---- */
+  .marquee-wrap{
+    overflow:hidden; border-top:1px solid var(--line-soft); border-bottom:1px solid var(--line-soft);
+    background:var(--bg-inset); position:relative;
+  }
+  .marquee-wrap::before, .marquee-wrap::after{
+    content:""; position:absolute; top:0; bottom:0; width:64px; z-index:2; pointer-events:none;
+  }
+  .marquee-wrap::before{ left:0; background:linear-gradient(90deg, var(--bg-inset), transparent); }
+  .marquee-wrap::after{ right:0; background:linear-gradient(270deg, var(--bg-inset), transparent); }
+  .marquee-track{ display:flex; width:max-content; animation: marquee-scroll 26s linear infinite; }
+  .marquee-track:hover{ animation-play-state:paused; }
+  .marquee-item{
+    display:flex; align-items:center; gap:10px; font-family:var(--mono); font-size:.92rem;
+    color:var(--text-dim); padding:13px 26px; white-space:nowrap; border-right:1px solid var(--line-soft);
+  }
+  .marquee-item b{ color:var(--text); font-weight:600; }
+  .marquee-item .dot{ width:7px; height:7px; border-radius:50%; flex:none; }
+  @keyframes marquee-scroll{ from{ transform:translateX(0); } to{ transform:translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce){ .marquee-track{ animation:none; } }
+  @media (max-width:520px){
+    .marquee-item{padding:11px 18px; font-size:.85rem;}
+  }
+
+  /* ---- Signature visual: the convergence diagram, right column of the hero ---- */
+  .hero-code{ width:100%; min-width:0; }
+  @media (max-width:900px){
+    .hero-grid{ grid-template-columns:1fr; gap:8px; padding-bottom:28px; }
+    .hero-code{ max-width:560px; margin:0 auto; }
+  }
+  .circuit{ position:relative; width:100%; }
+  .circuit svg{ width:100%; height:auto; display:block; overflow:visible; }
+  .circuit-cap{
+    text-align:center; font-family:var(--mono); font-size:.78rem; color:var(--text-faint);
+    margin-top:10px; letter-spacing:.02em;
+  }
+  .circuit-cap b{ color:var(--text-dim); font-weight:500; }
+  .cx-trace{ fill:none; stroke-width:1.6; stroke-linecap:round; opacity:.55; }
+  .cx-trace-anim{
+    stroke-dasharray:5 9; animation:cx-flow 2.6s linear infinite;
+  }
+  @keyframes cx-flow{ to{ stroke-dashoffset:-56; } }
+  .cx-node-label{ font-family:var(--mono); font-size:11px; fill:var(--text-dim); }
+  .cx-hub-label{ font-family:var(--display); font-size:15px; font-weight:600; fill:var(--text); }
+  .cx-hub-sub{ font-family:var(--mono); font-size:9.5px; fill:var(--text-faint); letter-spacing:.06em; }
+  .cx-out-label{ font-family:var(--mono); font-size:10px; fill:var(--text-faint); }
+  .cx-pulse{ animation:cx-pulse 3.2s ease-in-out infinite; }
+  @keyframes cx-pulse{ 0%,100%{ opacity:.55; } 50%{ opacity:1; } }
+  @media (prefers-reduced-motion: reduce){
+    .cx-trace-anim{ animation:none; } .cx-pulse{ animation:none; }
+  }
+  @media (max-width:900px){ .circuit svg{ max-width:480px; margin:0 auto; display:block; } }
+
+  /* ============ Trust bar ============ */
+  .trust-bar{border-bottom:1px solid var(--line-soft); padding:26px 0; position:relative;}
+  .trust-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:18px; text-align:center; position:relative;}
+  .trust-grid > div{ position:relative; padding:0 8px; }
+  .trust-grid > div:not(:last-child)::after{
+    content:""; position:absolute; top:2px; bottom:2px; right:-9px; width:1px; background:var(--line-soft);
+  }
+  .trust-grid .num{font-family:var(--display); font-size:1.8rem; font-weight:700; color:var(--accent, var(--text));}
+  .trust-grid .lbl{font-size:.82rem; color:var(--text-faint); margin-top:3px;}
+  @media (max-width:700px){
+    .trust-grid{grid-template-columns:repeat(2,1fr); row-gap:24px;}
+    .trust-grid > div:nth-child(2)::after{ display:none; }
+  }
+  @media (max-width:380px){ .trust-grid .num{font-size:1.4rem;} }
+
+  /* ============ Section shell ============ */
+  section{padding:52px 0; position:relative;}
+  @media (max-width:600px){ section{padding:38px 0;} }
+  #features{ position:relative; overflow:hidden; }
+  #features::before{
+    content:""; position:absolute; top:-60px; right:-160px; width:520px; height:520px; z-index:-1;
+    background:radial-gradient(circle, color-mix(in srgb, var(--rail) 9%, transparent), transparent 70%); pointer-events:none;
+  }
+  #providers{ position:relative; overflow:hidden; }
+  #providers::before{
+    content:""; position:absolute; top:20%; left:-180px; width:460px; height:460px; z-index:-1;
+    background:radial-gradient(circle, color-mix(in srgb, var(--signal) 8%, transparent), transparent 70%); pointer-events:none;
+  }
+  #why{ position:relative; overflow:hidden; }
+  #why::before{
+    content:""; position:absolute; bottom:-120px; right:-140px; width:480px; height:480px; z-index:-1;
+    background:radial-gradient(circle, color-mix(in srgb, var(--node-2) 12%, transparent), transparent 70%); pointer-events:none;
+  }
+  .section-head{max-width:640px; margin:0 0 30px;}
+  .section-head .eyebrow{margin-bottom:12px;}
+  .section-head h2{
+    font-family:var(--display); font-size:clamp(1.4rem,3vw,2.2rem); font-weight:600; letter-spacing:-.015em;
+    margin:0 0 12px; color:var(--text);
+  }
+  .section-head p{color:var(--text-dim); font-size:1rem; margin:0; line-height:1.6;}
+
+  /* ============ Capability grid (secondary feature list) ============ */
+  .capgrid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .cap-card{
+    display:flex; gap:14px; align-items:flex-start; background:var(--bg-raised); border:1px solid var(--line);
+    border-radius:10px; padding:15px 16px; transition:border-color .15s, transform .15s; min-width:0;
+  }
+  .cap-card:hover{ border-color:var(--accent, var(--rail-dim)); transform:translateY(-2px); }
+  .cap-icon{
+    width:32px; height:32px; border-radius:8px; flex:none; display:flex; align-items:center; justify-content:center;
+    background:var(--bg-inset); border:1px solid var(--line); color:var(--accent, var(--rail));
+  }
+  .cap-icon svg{ width:16px; height:16px; }
+  .cap-body h4{ font-family:var(--display); font-size:.94rem; font-weight:600; margin:0 0 3px; color:var(--text); }
+  .cap-body p{ margin:0; font-size:.82rem; line-height:1.5; color:var(--text-dim); word-wrap:break-word; }
+  @media (max-width:900px){ .capgrid{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:560px){ .capgrid{ grid-template-columns:1fr; } }
+
+  /* ============ Feature bento ============ */
+  .bento{display:grid; grid-template-columns:repeat(4,1fr); gap:12px;}
+  .bento .card{
+    background:var(--bg-raised); border:1px solid var(--line); border-radius:12px;
+    padding:20px 20px 22px; display:flex; flex-direction:column; position:relative;
+    transition:border-color .18s, transform .18s, box-shadow .18s; min-width:0;
+    overflow:hidden;
+  }
+  .bento .card::before{
+    content:""; position:absolute; top:0; left:0; right:0; height:2px;
+    background:var(--accent, var(--rail)); opacity:.7; transition:opacity .18s;
+  }
+  .bento .card:hover{border-color:var(--rail-dim); transform:translateY(-3px); box-shadow:var(--shadow);}
+  .bento .card:hover::before{ opacity:1; }
+  .card-icon{
+    width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+    background:var(--bg-inset); border:1px solid var(--line); color:var(--accent, var(--rail));
+    margin-bottom:16px; flex:none; transition:border-color .18s, transform .18s;
+  }
+  .card-icon svg{ width:20px; height:20px; }
+  .bento .card:hover .card-icon{ border-color:var(--accent, var(--rail-dim)); transform:scale(1.06); }
+  .bento .card .tag{
+    font-family:var(--mono); font-size:.7rem; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--accent, var(--text-faint)); margin-bottom:12px;
+  }
+  .bento .card h3{font-family:var(--display); font-size:1.04rem; font-weight:600; margin:0 0 8px; color:var(--text);}
+  .bento .card p{margin:0; color:var(--text-dim); font-size:.87rem; line-height:1.55; word-wrap:break-word;}
+  @media (max-width:820px){
+    .bento{grid-template-columns:repeat(2,1fr);}
+  }
+  @media (max-width:520px){
+    .bento{grid-template-columns:1fr;}
+  }
+
+  /* ============ Code showcase ============ */
+  .code-tabs{display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:0; overflow-x:auto; -webkit-overflow-scrolling:touch; background:var(--bg-raised); padding:6px 6px 0;}
+  .code-tab{
+    font-family:var(--mono); font-size:.86rem; padding:10px 18px; color:var(--text-faint); cursor:pointer;
+    white-space:nowrap; background:none; border:none; border-radius:8px 8px 0 0;
+    flex:none; transition:color .15s, background .15s; position:relative; top:1px;
+  }
+  .code-tab:hover{ color:var(--text-dim); }
+  .code-tab.active{color:var(--rail); background:var(--bg-inset); box-shadow: inset 0 2px 0 var(--rail);}
+  .code-panel{
+    display:none; background:var(--bg-inset); border:1px solid var(--line); border-top:none;
+    border-radius:0 0 10px 10px; padding:22px; overflow-x:auto;
+  }
+  .code-panel.active{display:block;}
+  .code-panel pre{margin:0; font-family:var(--mono); font-size:.86rem; line-height:1.75; color:var(--text);}
+  .code-panel .k{color:var(--code-k, #c9a4ff);}                 /* keywords: import, const, from, async, await */
+  .code-panel .fn{color:var(--code-fn, #7dd3fc);}                 /* function/method names */
+  .code-panel .str{color:var(--code-str, #8fe3a8);}                 /* string literals */
+  .code-panel .cm{color:var(--text-faint); font-style:italic;} /* comments */
+  .code-panel .pr{color:var(--code-pr, #F5A623);}                 /* object property keys */
+  .code-panel .num{color:var(--code-num, #f5716a);}                 /* numeric literals */
+  html[data-theme="light"] .code-panel{
+    --code-k:#7c3aed; --code-fn:#0369a1; --code-str:#15803d; --code-pr:#b45309; --code-num:#be123c;
+  }
+  .code-shell{border-radius:10px; overflow:hidden; box-shadow:var(--shadow); max-width:100%;}
+  @media (max-width:480px){
+    .code-tab{padding:10px 13px; font-size:.8rem;}
+    .code-panel{padding:16px;}
+    .code-panel pre{font-size:.78rem;}
+  }
+
+  /* ============ Why / comparison ============ */
+  .compare{display:grid; grid-template-columns:repeat(3,1fr); gap:14px;}
+  .compare .col{background:var(--bg-raised); border:1px solid var(--line); border-radius:12px; padding:22px; min-width:0;}
+  .compare .col.mid{border-color:var(--rail-dim); box-shadow:0 0 0 1px var(--rail-dim), var(--glow-rail), var(--shadow); background:linear-gradient(180deg, rgba(94,234,212,.06), var(--bg-raised) 55%);}
+  .compare .col h4{font-family:var(--mono); font-size:.82rem; letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint); margin:0 0 12px;}
+  .compare .col.mid h4{color:var(--rail);}
+  .compare .col p{color:var(--text-dim); font-size:.9rem; line-height:1.58; margin:0; word-wrap:break-word;}
+  @media (max-width:820px){ .compare{grid-template-columns:1fr;} }
+
+  /* ============ Providers grid ============ */
+  .providers-strip{display:flex; flex-wrap:wrap; gap:10px;}
+  .providers-strip .p-chip{
+    font-family:var(--mono); font-size:.88rem; padding:10px 16px; border:1px solid var(--line);
+    border-radius:8px; color:var(--text-dim); background:var(--bg-raised);
+    display:inline-flex; align-items:center; gap:9px; transition:border-color .15s, transform .15s;
+  }
+  .providers-strip .p-chip:hover{ border-color:var(--dot,var(--rail-dim)); transform:translateY(-2px); }
+  .providers-strip .p-chip .dot{ width:7px; height:7px; border-radius:50%; background:var(--dot,var(--rail)); flex:none; box-shadow:0 0 8px var(--dot,var(--rail)); }
+  .providers-strip .p-chip b{color:var(--text); font-weight:600;}
+  @media (max-width:480px){
+    .providers-strip{gap:8px;}
+    .providers-strip .p-chip{font-size:.8rem; padding:8px 12px; flex:1 1 calc(50% - 8px); text-align:center;}
+  }
+
+  /* ============ Footer ============ */
+  footer{border-top:1px solid var(--line-soft); padding:44px 0 32px;}
+  .footer-grid{display:grid; grid-template-columns:1.4fr repeat(3,1fr); gap:28px; margin-bottom:34px;}
+  .footer-grid h5{font-family:var(--mono); font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; color:var(--text-faint); margin:0 0 12px;}
+  .footer-grid ul{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:9px;}
+  .footer-grid a{color:var(--text-dim); font-size:.9rem;}
+  .footer-grid a:hover{color:var(--rail);}
+  .footer-bottom{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;
+    padding-top:22px; border-top:1px solid var(--line-soft); color:var(--text-faint); font-size:.85rem;}
+  @media (max-width:760px){ .footer-grid{grid-template-columns:1fr 1fr;} }
+  @media (max-width:460px){
+    .footer-grid{grid-template-columns:1fr; gap:26px;}
+    .footer-bottom{flex-direction:column; align-items:flex-start; text-align:left;}
+  }
+
+  /* ============ Final CTA panel ============ */
+  .cta-panel{
+    background:radial-gradient(120% 160% at 50% -20%, color-mix(in srgb, var(--rail) 10%, transparent), var(--bg-raised) 55%);
+    border:1px solid var(--line); border-radius:16px; padding:36px 32px; text-align:center;
+    position:relative; overflow:hidden;
+  }
+  .cta-panel::after{
+    content:""; position:absolute; top:-1px; left:10%; right:10%; height:1px;
+    background:linear-gradient(90deg, transparent, var(--rail), transparent);
+  }
+  @media (max-width:600px){ .cta-panel{padding:28px 20px;} }
+  .cta-panel .hero-actions .install-pill span:not(.prompt){white-space:nowrap; overflow-x:auto;}
+
+  .fade-up{opacity:0; transform:translateY(14px); transition:opacity .6s ease, transform .6s ease;}
+  .fade-up.in{opacity:1; transform:translateY(0);}
+  @media (prefers-reduced-motion: reduce){ .fade-up{opacity:1; transform:none; transition:none;} }
+
+  /* Prevent any block from forcing horizontal scroll */
+  table, pre, .terminal, .code-panel{max-width:100%;}
+
+  /* Smooth theme-switch transitions on the main surfaces */
+  .bento .card, .cap-card, .compare .col, .providers-strip .p-chip, .code-shell, .install-pill,
+  .marquee-wrap, .code-tabs, .code-panel, .cta-panel, footer, .nav-links, .btn, .theme-toggle,
+  .eyebrow, code{
+    transition:background-color .25s ease, border-color .25s ease, color .25s ease, box-shadow .25s ease;
+  }
+</style>
+</head>
+<body>
+
+<header class="site-nav">
+  <div class="wrap nav-row">
+    <a class="brand" href="#top"><span class="rail-dot"></span>samai-sdk</a>
+    <nav class="nav-links" id="nav-links">
+      <a href="#features">Features</a>
+      <a href="#providers">Providers</a>
+      <a href="#code">Code</a>
+      <a href="https://github.com/Sameer9823/samai-sdk" target="_blank" rel="noopener">GitHub</a>
+      <a class="docs-link" href="./doc.html">Docs ↗</a>
+    </nav>
+    <div class="nav-cta">
+      <button class="theme-toggle" id="theme-toggle" aria-label="Switch to light theme" title="Switch theme">
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.4"/><path d="M12 2.5v2.4M12 19.1v2.4M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.9 19.1l1.7-1.7M17.4 6.6l1.7-1.7"/></svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 019.5 4a8.5 8.5 0 1010.5 10.5z"/></svg>
+      </button>
+      <a class="btn gh-link" href="https://github.com/Sameer9823/samai-sdk" target="_blank" rel="noopener"><span class="gh-label">GitHub</span></a>
+      <a class="btn btn-solid" href="./doc.html">Read the docs</a>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav-links">
+        <svg class="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ============ HERO ============ -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <div class="eyebrow">TypeScript · 8 providers · 1 runtime</div>
+        <h1 class="hero-head">Every model provider.<br>One agent runtime, <em>not eight.</em></h1>
+        <p class="hero-sub">
+          samai-sdk gives you a real agent runtime — tool loop, handoffs, guardrails, MCP, RAG, structured
+          output, sessions, resumable runs, and full tracing — written once against a single <code>Provider</code>
+          interface. Swap OpenAI for Claude, or drop in a local Ollama model, by changing one line, not your whole app.
+        </p>
+        <div class="hero-actions">
+          <div class="install-pill" id="install-pill">
+            <span class="prompt">$</span>
+            <span id="install-cmd">npx samai-sdk create my-agent</span>
+            <button id="copy-btn" aria-label="Copy install command" title="Copy">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            </button>
+          </div>
+          <a class="btn btn-solid" href="./doc.html">View documentation</a>
+          <a class="btn" href="#code">See the code ↓</a>
+        </div>
+      </div>
+
+      <div class="hero-code fade-up">
+        <div class="circuit">
+          <svg viewBox="0 0 640 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Eight provider adapters converging into one samai-sdk interface, fanning out into the agent runtime">
+            <defs>
+              <radialGradient id="hubGlow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#5EEAD4" stop-opacity=".55"/>
+                <stop offset="100%" stop-color="#5EEAD4" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+
+            <!-- traces: providers -> hub -->
+            <g class="cx-trace cx-trace-anim" stroke="#7dd3fc"><path d="M40,72 C40,150 260,150 296,214"/></g>
+            <g class="cx-trace cx-trace-anim" stroke="#5EEAD4" style="animation-delay:-.3s"><path d="M126,72 C126,150 280,160 306,214"/></g>
+            <g class="cx-trace cx-trace-anim" stroke="#c9a4ff" style="animation-delay:-.6s"><path d="M212,72 C212,140 300,170 316,214"/></g>
+            <g class="cx-trace cx-trace-anim" stroke="#F5A623" style="animation-delay:-.9s"><path d="M298,72 C298,130 320,170 324,214"/></g>
+            <g class="cx-trace cx-trace-anim" stroke="#f5716a" style="animation-delay:-1.2s"><path d="M384,72 C384,130 340,170 336,214"/></g>
+            <g class="cx-trace cx-trace-anim" stroke="#8fe3a8" style="animation-delay:-1.5s"><path d="M470,72 C470,140 360,160 344,214"/></g>
+            <g class="cx-trace cx-trace-anim" stroke="#7dd3fc" style="animation-delay:-1.8s"><path d="M556,72 C556,150 380,150 354,214"/></g>
+            <g class="cx-trace cx-trace-anim" stroke="#c9a4ff" style="animation-delay:-2.1s"><path d="M600,110 C600,180 400,170 362,214"/></g>
+
+            <!-- traces: hub -> runtime outputs -->
+            <g class="cx-trace cx-trace-anim" stroke="#5EEAD4" style="animation-delay:-.2s"><path d="M300,278 C270,320 190,330 152,362"/></g>
+            <g class="cx-trace cx-trace-anim" stroke="#5EEAD4" style="animation-delay:-.7s"><path d="M312,282 C300,320 280,335 262,362"/></g>
+            <g class="cx-trace cx-trace-anim" stroke="#5EEAD4" style="animation-delay:-1.1s"><path d="M348,282 C368,320 388,335 406,362"/></g>
+            <g class="cx-trace cx-trace-anim" stroke="#5EEAD4" style="animation-delay:-1.6s"><path d="M360,278 C400,320 470,330 508,362"/></g>
+
+            <!-- provider nodes -->
+            <g class="cx-pulse">
+              <circle cx="40" cy="58" r="14" fill="var(--bg-inset)" stroke="#7dd3fc" stroke-width="2"/>
+              <text x="40" y="34" text-anchor="middle" class="cx-node-label">OpenAI</text>
+            </g>
+            <g class="cx-pulse" style="animation-delay:-.4s">
+              <circle cx="126" cy="58" r="14" fill="var(--bg-inset)" stroke="#5EEAD4" stroke-width="2"/>
+              <text x="126" y="34" text-anchor="middle" class="cx-node-label">Anthropic</text>
+            </g>
+            <g class="cx-pulse" style="animation-delay:-.8s">
+              <circle cx="212" cy="58" r="14" fill="var(--bg-inset)" stroke="#c9a4ff" stroke-width="2"/>
+              <text x="212" y="34" text-anchor="middle" class="cx-node-label">Google</text>
+            </g>
+            <g class="cx-pulse" style="animation-delay:-1.2s">
+              <circle cx="298" cy="58" r="14" fill="var(--bg-inset)" stroke="#F5A623" stroke-width="2"/>
+              <text x="298" y="34" text-anchor="middle" class="cx-node-label">Groq</text>
+            </g>
+            <g class="cx-pulse" style="animation-delay:-1.6s">
+              <circle cx="384" cy="58" r="14" fill="var(--bg-inset)" stroke="#f5716a" stroke-width="2"/>
+              <text x="384" y="34" text-anchor="middle" class="cx-node-label">Mistral</text>
+            </g>
+            <g class="cx-pulse" style="animation-delay:-2s">
+              <circle cx="470" cy="58" r="14" fill="var(--bg-inset)" stroke="#8fe3a8" stroke-width="2"/>
+              <text x="470" y="34" text-anchor="middle" class="cx-node-label">Ollama</text>
+            </g>
+            <g class="cx-pulse" style="animation-delay:-2.4s">
+              <circle cx="556" cy="58" r="14" fill="var(--bg-inset)" stroke="#7dd3fc" stroke-width="2"/>
+              <text x="556" y="34" text-anchor="middle" class="cx-node-label">Azure</text>
+            </g>
+            <g class="cx-pulse" style="animation-delay:-2.8s">
+              <circle cx="600" cy="96" r="14" fill="var(--bg-inset)" stroke="#c9a4ff" stroke-width="2"/>
+              <text x="600" y="126" text-anchor="middle" class="cx-node-label">Bedrock</text>
+            </g>
+
+            <!-- hub -->
+            <circle cx="330" cy="246" r="70" fill="url(#hubGlow)"/>
+            <circle cx="330" cy="246" r="34" fill="var(--bg-inset)" stroke="#5EEAD4" stroke-width="2"/>
+            <text x="330" y="243" text-anchor="middle" class="cx-hub-label">sdk</text>
+            <text x="330" y="257" text-anchor="middle" class="cx-hub-sub">1 INTERFACE</text>
+
+            <!-- runtime output nodes -->
+            <g>
+              <circle cx="140" cy="376" r="11" fill="var(--bg-inset)" stroke="#5EEAD4" stroke-width="1.6"/>
+              <text x="140" y="404" text-anchor="middle" class="cx-out-label">Agent loop</text>
+            </g>
+            <g>
+              <circle cx="270" cy="376" r="11" fill="var(--bg-inset)" stroke="#5EEAD4" stroke-width="1.6"/>
+              <text x="270" y="404" text-anchor="middle" class="cx-out-label">Guardrails</text>
+            </g>
+            <g>
+              <circle cx="418" cy="376" r="11" fill="var(--bg-inset)" stroke="#5EEAD4" stroke-width="1.6"/>
+              <text x="418" y="404" text-anchor="middle" class="cx-out-label">MCP</text>
+            </g>
+            <g>
+              <circle cx="518" cy="376" r="11" fill="var(--bg-inset)" stroke="#5EEAD4" stroke-width="1.6"/>
+              <text x="518" y="404" text-anchor="middle" class="cx-out-label">Tracing</text>
+            </g>
+          </svg>
+          <p class="circuit-cap">Eight providers converge on <b>one</b> <code style="background:none;border:none;padding:0;">Provider</code> interface — the whole runtime is built against it, not against any one vendor.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="trace-divider fade-up" style="margin:8px 0 26px;"><span class="line"></span><span class="node"></span><span class="line"></span></div>
+    </div>
+
+    <!-- Provider marquee — full-bleed, seamless loop, pauses on hover -->
+    <div class="marquee-wrap fade-up" role="list" aria-label="Supported providers">
+      <div class="marquee-track">
+        <span class="marquee-item"><span class="dot" style="background:var(--node-1)"></span><b>OpenAI</b> · openai()</span>
+        <span class="marquee-item"><span class="dot" style="background:var(--rail)"></span><b>Anthropic</b> · anthropic()</span>
+        <span class="marquee-item"><span class="dot" style="background:var(--node-2)"></span><b>Google</b> · google()</span>
+        <span class="marquee-item"><span class="dot" style="background:var(--signal)"></span><b>Groq</b> · groq()</span>
+        <span class="marquee-item"><span class="dot" style="background:var(--node-3)"></span><b>Mistral</b> · mistral()</span>
+        <span class="marquee-item"><span class="dot" style="background:var(--node-4)"></span><b>Ollama</b> · ollama()</span>
+        <span class="marquee-item"><span class="dot" style="background:var(--node-1)"></span><b>Azure OpenAI</b> · azureOpenAI()</span>
+        <span class="marquee-item"><span class="dot" style="background:var(--node-2)"></span><b>AWS Bedrock</b> · bedrock()</span>
+        <!-- duplicate set for a seamless loop -->
+        <span class="marquee-item"><span class="dot" style="background:var(--node-1)"></span><b>OpenAI</b> · openai()</span>
+        <span class="marquee-item"><span class="dot" style="background:var(--rail)"></span><b>Anthropic</b> · anthropic()</span>
+        <span class="marquee-item"><span class="dot" style="background:var(--node-2)"></span><b>Google</b> · google()</span>
+        <span class="marquee-item"><span class="dot" style="background:var(--signal)"></span><b>Groq</b> · groq()</span>
+        <span class="marquee-item"><span class="dot" style="background:var(--node-3)"></span><b>Mistral</b> · mistral()</span>
+        <span class="marquee-item"><span class="dot" style="background:var(--node-4)"></span><b>Ollama</b> · ollama()</span>
+        <span class="marquee-item"><span class="dot" style="background:var(--node-1)"></span><b>Azure OpenAI</b> · azureOpenAI()</span>
+        <span class="marquee-item"><span class="dot" style="background:var(--node-2)"></span><b>AWS Bedrock</b> · bedrock()</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TRUST BAR ============ -->
+  
+
+  <!-- ============ FEATURES ============ -->
+  <section id="features">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="eyebrow">What's in the runtime</div>
+        <h2>Not a wrapper. Not a framework. The primitives, done properly.</h2>
+        <p>Everything a production agent needs, implemented directly against <code>generate()</code>/<code>stream()</code> — so it works identically no matter which provider is behind it.</p>
+      </div>
+
+      <div class="bento">
+        <div class="card" style="--accent:var(--rail);">
+          <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18.2 8c5.1 0 5.1 8 0 8-5.1 0-7.1-8-12.2-8-5.1 0-5.1 8 0 8 5.1 0 7.1-8 12.2-8z"/></svg></div>
+          <div class="tag">Runtime</div>
+          <h3>Agent runtime &amp; handoffs</h3>
+          <p><code>defineAgent()</code> + <code>runAgentStream()</code> — the real tool loop, multi-agent handoffs with cycle prevention, and a full <code>RunTrace</code> on every run.</p>
+        </div>
+        <div class="card" style="--accent:var(--node-2);">
+          <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v5M15 2v5"/><path d="M6 8h12l-1 5a5 5 0 01-10 0L6 8z"/><path d="M10 19v2M14 19v2"/></svg></div>
+          <div class="tag">Protocol</div>
+          <h3>MCP client</h3>
+          <p><code>createMCPClient()</code> turns any MCP server's tools into ordinary <code>ToolDefinition</code>s — local stdio or remote HTTP/SSE.</p>
+        </div>
+        <div class="card" style="--accent:var(--node-4);">
+          <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></div>
+          <div class="tag">Long-horizon</div>
+          <h3>Sandboxed code execution</h3>
+          <p><code>createSandbox()</code> runs real JS/Python/bash in an isolated temp dir — minimal env, real timeouts, byte-accurate output caps. <code>createSandboxTools()</code> wires it in as agent tools.</p>
+        </div>
+        <div class="card" style="--accent:var(--signal);">
+          <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></div>
+          <div class="tag">Realtime</div>
+          <h3>Voice / realtime agents</h3>
+          <p><code>createRealtimeSession()</code> — streamed audio/text over WebSocket, server VAD, one-call barge-in <code>interrupt()</code>, plus <code>generateSpeech()</code>/<code>transcribeAudio()</code>.</p>
+        </div>
+        <div class="card" style="--accent:var(--node-3);">
+          <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+          <div class="tag">Safety</div>
+          <h3>Guardrails &amp; approval</h3>
+          <p>PII redaction, prompt-injection detection, budget caps, and human-in-the-loop approval gates that fail closed by default.</p>
+        </div>
+        <div class="card" style="--accent:var(--node-4);">
+          <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></div>
+          <div class="tag">Knowledge</div>
+          <h3>RAG / vector search</h3>
+          <p>Swappable <code>VectorStore</code> + <code>EmbeddingProvider</code>, wired into a ready-to-use retrieval tool in one call.</p>
+        </div>
+        <div class="card" style="--accent:var(--signal);">
+          <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.5 9a9 9 0 0114.1-3.4L23 10"/><path d="M1 14l5.4 4.4A9 9 0 0020.5 15"/></svg></div>
+          <div class="tag">Resilience</div>
+          <h3>Retries, fallback &amp; timeouts</h3>
+          <p>Real <code>AbortController</code> deadlines, exponential backoff, and provider fallback chains — every event fully traced.</p>
+        </div>
+        <div class="card" style="--accent:var(--node-1);">
+          <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+          <div class="tag">Observability</div>
+          <h3>Tracing, OTel &amp; a local trace viewer</h3>
+          <p>Every run produces a structured <code>RunTrace</code>. Export it to real OpenTelemetry spans, or render it as an offline HTML timeline with <code>samai-sdk trace</code>.</p>
+        </div>
+        <div class="card" style="--accent:var(--rail);">
+          <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg></div>
+          <div class="tag">Durability</div>
+          <h3>Resumable runs</h3>
+          <p>Checkpoint after every turn and resume after a crash — no tool call is ever re-executed.</p>
+        </div>
+        <div class="card" style="--accent:var(--node-2);">
+          <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></div>
+          <div class="tag">DX</div>
+          <h3>CLI &amp; framework hooks</h3>
+          <p><code>npx samai-sdk create</code> scaffolds a runnable project. <code>useAgent()</code> ships for React, Vue and Svelte.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ EVERYTHING ELSE ============ -->
+  <section id="more" style="padding-top:0;">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="eyebrow">Also included</div>
+        <h2>The rest of the toolkit</h2>
+        <p>Every one of these ships in the same package as the runtime above — no separate install, no separate mental model.</p>
+      </div>
+
+      <div class="capgrid">
+        <div class="cap-card" style="--accent:var(--rail);">
+          <div class="cap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+          <div class="cap-body"><h4>Real web search</h4><p><code style="background:none;border:none;padding:0;">createWebSearchTool()</code> — a live Tavily/Brave-backed tool, not a stub.</p></div>
+        </div>
+        <div class="cap-card" style="--accent:var(--node-1);">
+          <div class="cap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3a2 2 0 00-2 2v3a1 1 0 01-1 1H4v2h1a1 1 0 011 1v3a2 2 0 002 2"/><path d="M16 3a2 2 0 012 2v3a1 1 0 001 1h1v2h-1a1 1 0 00-1 1v3a2 2 0 01-2 2"/></svg></div>
+          <div class="cap-body"><h4>Structured output</h4><p><code style="background:none;border:none;padding:0;">generateObject()</code>, <code style="background:none;border:none;padding:0;">streamObject()</code> and batch, with auto-repair on failed validation.</p></div>
+        </div>
+        <div class="cap-card" style="--accent:var(--node-2);">
+          <div class="cap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
+          <div class="cap-body"><h4>Standard Schema support</h4><p>Pass a zod schema or a valibot 1.x (or any Standard Schema) validator, interchangeably.</p></div>
+        </div>
+        <div class="cap-card" style="--accent:var(--node-3);">
+          <div class="cap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+          <div class="cap-body"><h4>Prompt caching</h4><p><code style="background:none;border:none;padding:0;">promptCaching: true</code> adds Anthropic cache breakpoints and surfaces cache-token usage.</p></div>
+        </div>
+        <div class="cap-card" style="--accent:var(--node-4);">
+          <div class="cap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l1-3h16l1 3"/><rect x="3" y="7" width="18" height="13" rx="1"/><path d="M9 12h6"/></svg></div>
+          <div class="cap-body"><h4>Sessions &amp; memory</h4><p>In-memory, file, Redis, or SQLite-backed conversation history — one interface, four stores.</p></div>
+        </div>
+        <div class="cap-card" style="--accent:var(--signal);">
+          <div class="cap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div>
+          <div class="cap-body"><h4>Usage &amp; cost tracking</h4><p><code style="background:none;border:none;padding:0;">createUsageLedger()</code> attributes token spend per session, user, or model.</p></div>
+        </div>
+        <div class="cap-card" style="--accent:var(--rail);">
+          <div class="cap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 12h6M4 18h13"/><circle cx="17" cy="6" r="2"/><circle cx="13" cy="12" r="2"/><circle cx="19" cy="18" r="2"/></svg></div>
+          <div class="cap-body"><h4>Concurrency &amp; rate limits</h4><p><code style="background:none;border:none;padding:0;">withConcurrencyLimit()</code> / <code style="background:none;border:none;padding:0;">withRateLimit()</code> queue calls instead of rejecting them.</p></div>
+        </div>
+        <div class="cap-card" style="--accent:var(--node-1);">
+          <div class="cap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v6l-5 9a2 2 0 001.8 3h12.4a2 2 0 001.8-3l-5-9V2"/><path d="M9 2h6"/></svg></div>
+          <div class="cap-body"><h4>Testing utilities</h4><p><code style="background:none;border:none;padding:0;">createMockProvider()</code> scripts responses with a call log — no API key needed.</p></div>
+        </div>
+        <div class="cap-card" style="--accent:var(--node-2);">
+          <div class="cap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>
+          <div class="cap-body"><h4>Multi-modal input</h4><p>Image inputs — base64 or URL — correctly branched per provider's real API shape.</p></div>
+        </div>
+        <div class="cap-card" style="--accent:var(--node-3);">
+          <div class="cap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.86 2h8.28L22 7.86v8.28L16.14 22H7.86L2 16.14V7.86L7.86 2z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div>
+          <div class="cap-body"><h4>Typed error handling</h4><p><code style="background:none;border:none;padding:0;">AgentRunError</code>, <code style="background:none;border:none;padding:0;">GuardrailBlockedError</code> and more — every failure mode is a real type.</p></div>
+        </div>
+        <div class="cap-card" style="--accent:var(--node-4);">
+          <div class="cap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 000-9 6 6 0 00-11.6 1.7A4 4 0 006 19h11.5z"/></svg></div>
+          <div class="cap-body"><h4>Edge &amp; serverless ready</h4><p>A deployment guide covering Node, Vercel Edge, and Cloudflare Workers, with a custom-store recipe.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PROVIDERS ============ -->
+  <section id="providers" style="padding-top:0;">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="eyebrow">One Provider interface</div>
+        <h2>Eight adapters. Same <code style="background:none;border:none;color:var(--rail);padding:0;">generate()</code> / <code style="background:none;border:none;color:var(--rail);padding:0;">stream()</code> shape.</h2>
+        <p>Nothing in the agent runtime, guardrails, or tracing knows or cares which one is behind a given agent.</p>
+      </div>
+      <div class="providers-strip">
+        <div class="p-chip" style="--dot:var(--node-1);"><span class="dot"></span><b>OpenAI</b> · openai()</div>
+        <div class="p-chip" style="--dot:var(--rail);"><span class="dot"></span><b>Anthropic</b> · anthropic()</div>
+        <div class="p-chip" style="--dot:var(--node-2);"><span class="dot"></span><b>Google</b> · google()</div>
+        <div class="p-chip" style="--dot:var(--signal);"><span class="dot"></span><b>Groq</b> · groq()</div>
+        <div class="p-chip" style="--dot:var(--node-3);"><span class="dot"></span><b>Mistral</b> · mistral()</div>
+        <div class="p-chip" style="--dot:var(--node-4);"><span class="dot"></span><b>Ollama</b> · ollama() — local, no key</div>
+        <div class="p-chip" style="--dot:var(--node-1);"><span class="dot"></span><b>Azure OpenAI</b> · azureOpenAI()</div>
+        <div class="p-chip" style="--dot:var(--node-2);"><span class="dot"></span><b>AWS Bedrock</b> · bedrock()</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CODE SHOWCASE ============ -->
+  <section id="code">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="eyebrow">See it in context</div>
+        <h2>Six things you'll actually reach for</h2>
+        <p>The same patterns from the docs, condensed — click through to the full reference for everything else.</p>
+      </div>
+
+      <div class="code-shell">
+        <div class="code-tabs" role="tablist">
+          <button class="code-tab active" data-tab="quickstart">Quick start</button>
+          <button class="code-tab" data-tab="handoff">Agent handoff</button>
+          <button class="code-tab" data-tab="mcp">MCP</button>
+          <button class="code-tab" data-tab="sandbox">Sandbox</button>
+          <button class="code-tab" data-tab="voice">Voice</button>
+          <button class="code-tab" data-tab="guardrail">Guardrails</button>
+        </div>
+
+        <div class="code-panel active" data-panel="quickstart">
+<pre><span class="k">import</span> { createClient, anthropic, defineTool } <span class="k">from</span> <span class="str">"samai-sdk"</span>;
+<span class="k">import</span> { z } <span class="k">from</span> <span class="str">"zod"</span>;
+
+<span class="k">const</span> getWeather = <span class="fn">defineTool</span>({
+  <span class="pr">name</span>: <span class="str">"get_weather"</span>,
+  <span class="pr">parameters</span>: z.<span class="fn">object</span>({ city: z.<span class="fn">string</span>() }),
+  <span class="pr">execute</span>: <span class="k">async</span> ({ city }) =&gt; ({ city, tempC: <span class="num">28</span>, condition: <span class="str">"sunny"</span> }),
+});
+
+<span class="k">const</span> client = <span class="fn">createClient</span>({ <span class="pr">provider</span>: <span class="fn">anthropic</span>({ apiKey }) });
+
+<span class="k">const</span> result = <span class="k">await</span> client.<span class="fn">generate</span>({
+  <span class="pr">model</span>: <span class="str">"claude-sonnet-4-6"</span>,
+  <span class="pr">messages</span>: [{ role: <span class="str">"user"</span>, content: <span class="str">"Weather in Chennai?"</span> }],
+  <span class="pr">tools</span>: [getWeather],
+});</pre>
+        </div>
+
+        <div class="code-panel" data-panel="handoff">
+<pre><span class="k">const</span> packingAgent = <span class="fn">defineAgent</span>({
+  <span class="pr">name</span>: <span class="str">"packing_specialist"</span>,
+  <span class="pr">instructions</span>: <span class="str">"Give packing advice from the weather already discussed."</span>,
+  <span class="pr">model</span>: <span class="str">"claude-sonnet-4-6"</span>,
+});
+
+<span class="k">const</span> routerAgent = <span class="fn">defineAgent</span>({
+  <span class="pr">name</span>: <span class="str">"trip_router"</span>,
+  <span class="pr">instructions</span>: <span class="str">"Look up weather, then hand off to packing_specialist."</span>,
+  <span class="pr">model</span>: <span class="str">"claude-sonnet-4-6"</span>,
+  <span class="pr">tools</span>: [getWeather],
+  <span class="pr">handoffs</span>: [packingAgent],
+});
+
+<span class="k">const</span> result = <span class="k">await</span> <span class="fn">runAgent</span>(client, routerAgent, <span class="str">"Pack for Tokyo?"</span>);
+result.finalAgent; <span class="cm">// "packing_specialist"</span></pre>
+        </div>
+
+        <div class="code-panel" data-panel="mcp">
+<pre><span class="k">const</span> filesystem = <span class="fn">createMCPClient</span>({
+  <span class="pr">transport</span>: {
+    transport: <span class="str">"stdio"</span>, command: <span class="str">"npx"</span>,
+    args: [<span class="str">"-y"</span>, <span class="str">"@modelcontextprotocol/server-filesystem"</span>, <span class="str">"/tmp"</span>],
+  },
+  <span class="pr">toolPrefix</span>: <span class="str">"fs"</span>,
+});
+
+<span class="k">const</span> agent = <span class="fn">defineAgent</span>({
+  <span class="pr">name</span>: <span class="str">"file_assistant"</span>,
+  <span class="pr">instructions</span>: <span class="str">"Help inspect files in /tmp using the fs__ tools."</span>,
+  <span class="pr">model</span>: <span class="str">"claude-sonnet-4-6"</span>,
+  <span class="pr">tools</span>: <span class="k">await</span> filesystem.<span class="fn">tools</span>(),
+});</pre>
+        </div>
+
+        <div class="code-panel" data-panel="sandbox">
+<pre><span class="k">const</span> sandbox = <span class="fn">createSandbox</span>();
+
+<span class="k">const</span> agent = <span class="fn">defineAgent</span>({
+  <span class="pr">name</span>: <span class="str">"coder"</span>,
+  <span class="pr">instructions</span>: <span class="str">"Write and test code using write_file and execute_code."</span>,
+  <span class="pr">model</span>: <span class="str">"claude-sonnet-4-6"</span>,
+  <span class="pr">tools</span>: <span class="fn">createSandboxTools</span>(sandbox), <span class="cm">// execute_code, write_file, read_file, list_files</span>
+});
+
+<span class="k">const</span> result = <span class="k">await</span> <span class="fn">runAgent</span>(client, agent, <span class="str">"Write fibonacci.py, run it, and tell me the output."</span>);
+<span class="k">await</span> sandbox.<span class="fn">close</span>(); <span class="cm">// deletes the temp directory</span></pre>
+        </div>
+
+        <div class="code-panel" data-panel="voice">
+<pre><span class="k">const</span> session = <span class="fn">createRealtimeSession</span>({
+  <span class="pr">instructions</span>: <span class="str">"You are a helpful, concise voice assistant."</span>,
+  <span class="pr">voice</span>: <span class="str">"alloy"</span>,
+  <span class="pr">tools</span>: [getWeatherTool], <span class="cm">// called automatically when the model invokes them</span>
+});
+
+session.<span class="fn">on</span>((event) =&gt; {
+  <span class="k">if</span> (event.type === <span class="str">"audio.delta"</span>) <span class="fn">playAudioChunk</span>(event.audio);
+  <span class="k">if</span> (event.type === <span class="str">"speech_started"</span>) <span class="fn">stopSpeakerPlayback</span>(); <span class="cm">// barge-in</span>
+});
+
+<span class="k">await</span> session.<span class="fn">connect</span>();
+session.<span class="fn">sendText</span>(<span class="str">"What's the weather in Tokyo?"</span>);
+session.<span class="fn">interrupt</span>(); <span class="cm">// cancels the in-flight response, instantly</span></pre>
+        </div>
+
+        <div class="code-panel" data-panel="guardrail">
+<pre><span class="k">const</span> client = <span class="fn">createClient</span>({
+  <span class="pr">provider</span>: <span class="fn">openai</span>({ apiKey }),
+  <span class="pr">inputGuardrails</span>: [
+    <span class="fn">createPiiInputGuardrail</span>({ mode: <span class="str">"redact"</span> }),
+    <span class="fn">createPromptInjectionGuardrail</span>({ mode: <span class="str">"block"</span> }),
+  ],
+  <span class="pr">outputGuardrails</span>: [
+    <span class="fn">createSchemaGuardrail</span>(ReviewSchema),
+  ],
+});
+<span class="cm">// blocked calls throw GuardrailBlockedError with the reason attached</span></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ WHY ============ -->
+  <section id="why">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="eyebrow">Where it sits</div>
+        <h2>Between "you build the loop yourself" and vendor lock-in</h2>
+      </div>
+      <div class="compare">
+        <div class="col">
+          <h4>Thin provider wrapper</h4>
+          <p>One API across providers, but no orchestration — you still write the tool loop, handoffs, retries, and tracing yourself.</p>
+        </div>
+        <div class="col mid">
+          <h4>samai-sdk</h4>
+          <p>A full agent runtime — loop, handoffs, guardrails, sessions, tracing, resumable runs — written against <code style="background:none;border:none;padding:0;color:var(--rail);">generate()</code>/<code style="background:none;border:none;padding:0;color:var(--rail);">stream()</code>, so it stays provider-agnostic by construction. Under 2,500 lines, readable in an afternoon.</p>
+        </div>
+        <div class="col">
+          <h4>Heavyweight framework</h4>
+          <p>Full orchestration, but its own state and deployment model — and it usually shines brightest on one vendor's models.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FINAL CTA ============ -->
+  <section style="padding-top:0;">
+    <div class="wrap">
+      <div class="cta-panel">
+        <h2 style="font-family:var(--display); font-size:clamp(1.4rem,3vw,2rem); margin:0 0 10px; color:var(--text);">Scaffold a working agent in one command</h2>
+        <p style="color:var(--text-dim); max-width:480px; margin:0 auto 20px;">No manual wiring — pick a provider, get a runnable project with one agent and one tool already working.</p>
+        <div class="hero-actions" style="justify-content:center; margin-bottom:0;">
+          <div class="install-pill">
+            <span class="prompt">$</span><span>npx samai-sdk create my-agent --provider anthropic</span>
+          </div>
+          <a class="btn btn-solid" href="./doc.html">Read the full docs</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="trace-divider" style="margin-bottom:36px;"><span class="line"></span><span class="node"></span><span class="line"></span></div>
+    <div class="footer-grid">
+      <div>
+        <a class="brand" href="#top"><span class="rail-dot"></span>samai-sdk</a>
+        <p style="color:var(--text-faint); font-size:.88rem; max-width:280px; margin:12px 0 0;">A unified, from-scratch TypeScript agent SDK. MIT licensed.</p>
+      </div>
+      <div>
+        <h5>Docs</h5>
+        <ul>
+          <li><a href="./doc.html">Full documentation</a></li>
+          <li><a href="./doc.html#mcp">MCP client</a></li>
+          <li><a href="./doc.html#agent-runtime">Agent runtime</a></li>
+          <li><a href="./deployment.md">Deployment guide</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Project</h5>
+        <ul>
+          <li><a href="https://github.com/Sameer9823/samai-sdk" target="_blank" rel="noopener">GitHub</a></li>
+          <li><a href="https://www.npmjs.com/package/samai-sdk" target="_blank" rel="noopener">npm</a></li>
+          <li><a href="https://github.com/Sameer9823/samai-sdk/blob/master/LICENSE" target="_blank" rel="noopener">License</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Get started</h5>
+        <ul>
+          <li><a href="./doc.html#install">Installation</a></li>
+          <li><a href="./doc.html#quickstart">Quick start</a></li>
+          <li><a href="./doc.html#providers">Providers</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© <span id="year"></span> samai-sdk</span>
+      <span>Built directly against generate()/stream() — no vendor lock-in.</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  // Theme toggle — defaults to dark (the SDK's native identity), no persistence across page loads
+  const root = document.documentElement;
+  const themeBtn = document.getElementById('theme-toggle');
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+  function setTheme(mode){
+    if (mode === 'light') {
+      root.setAttribute('data-theme', 'light');
+      themeColorMeta?.setAttribute('content', '#F5F7FB');
+      themeBtn?.setAttribute('aria-label', 'Switch to dark theme');
+    } else {
+      root.removeAttribute('data-theme');
+      themeColorMeta?.setAttribute('content', '#0B1120');
+      themeBtn?.setAttribute('aria-label', 'Switch to light theme');
+    }
+  }
+  themeBtn?.addEventListener('click', () => {
+    const isLight = root.getAttribute('data-theme') === 'light';
+    setTheme(isLight ? 'dark' : 'light');
+  });
+
+  // Copy install command
+  const copyBtn = document.getElementById('copy-btn');
+  const pill = document.getElementById('install-pill');
+  copyBtn?.addEventListener('click', async () => {
+    const text = document.getElementById('install-cmd').textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      pill.classList.add('copied');
+      setTimeout(() => pill.classList.remove('copied'), 1500);
+    } catch (e) { /* clipboard unavailable — no-op */ }
+  });
+
+  // Code tabs
+  document.querySelectorAll('.code-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.code-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.code-panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.querySelector('.code-panel[data-panel="' + tab.dataset.tab + '"]').classList.add('active');
+    });
+  });
+
+  // Mobile nav toggle
+  const navToggle = document.getElementById('nav-toggle');
+  const navLinks = document.getElementById('nav-links');
+  navToggle?.addEventListener('click', () => {
+    const isOpen = navLinks.classList.toggle('open');
+    navToggle.classList.toggle('open', isOpen);
+    navToggle.setAttribute('aria-expanded', String(isOpen));
+  });
+  navLinks?.querySelectorAll('a').forEach(a => {
+    a.addEventListener('click', () => {
+      navLinks.classList.remove('open');
+      navToggle.classList.remove('open');
+      navToggle.setAttribute('aria-expanded', 'false');
+    });
+  });
+
+  // Fade-up on load (respects prefers-reduced-motion via CSS)
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.fade-up').forEach(el => el.classList.add('in'));
+  });
+</script>
+
+</body>
+</html>

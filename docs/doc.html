@@ -1,0 +1,3725 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>samai-sdk — docs</title>
+    <meta
+      name="description"
+      content="Documentation for samai-sdk: a unified, from-scratch TypeScript agent SDK with tool calling, handoffs, guardrails, sessions, and tracing."
+    />
+    <style>
+      /* ============================================================
+     TOKENS — pure black canvas, mint signal color, quiet grays.
+     Inspired by the reference screenshots: near-black bg, a single
+     bright mint/green accent used sparingly for state (active nav,
+     active tab, links), everything else desaturated.
+  ============================================================= */
+      :root {
+        color-scheme: dark;
+        --bg: #000000;
+        --bg-raised: #0a0a0a;
+        --bg-inset: #0d0d0d;
+        --bg-card: #0a0a0a;
+        --bg-hover: rgba(255, 255, 255, 0.045);
+        --line: #1f1f1f;
+        --line-soft: #161616;
+        --line-hover: #2e2e2e;
+        --text: #ededed;
+        --text-dim: #a0a0a0;
+        --text-faint: #666666;
+        --accent: #2ee6a8;
+        --accent-dim: #1fae80;
+        --accent-ink: #06120e;
+        --accent-soft: rgba(46, 230, 168, 0.09);
+        --warn: #f2b84b;
+        --danger: #f2726b;
+        --ok: #6bdc9a;
+        --purple: #b79bf5;
+        --blue: #6ab6f2;
+        --shadow: 0 24px 48px rgba(0, 0, 0, 0.55);
+        --bg-blur: rgba(0, 0, 0, 0.85);
+        --radius: 10px;
+        --tok-keyword: var(--accent);
+        --tok-string: var(--ok);
+        --tok-fn: var(--purple);
+        --tok-comment: var(--text-faint);
+        --tok-punct: var(--text-dim);
+        --tok-num: var(--warn);
+        --tok-class: var(--blue);
+        --tok-prop: var(--text);
+        --tok-op: var(--text-dim);
+        --mono:
+          "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, Consolas,
+          monospace;
+        --sans:
+          "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica,
+          Arial, sans-serif;
+      }
+      /* ============================================================
+     LIGHT THEME — same structure, inverted surfaces. Mint accent
+     is deepened slightly so it keeps enough contrast on white.
+  ============================================================= */
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg: #ffffff;
+        --bg-raised: #f6f7f7;
+        --bg-inset: #f1f2f2;
+        --bg-card: #f8f9f9;
+        --bg-hover: rgba(0, 0, 0, 0.035);
+        --line: #e6e7e7;
+        --line-soft: #edeeee;
+        --line-hover: #d2d4d4;
+        --text: #171818;
+        --text-dim: #55595a;
+        --text-faint: #8a8e8f;
+        --accent: #0f9d70;
+        --accent-dim: #0c7d5a;
+        --accent-ink: #ffffff;
+        --accent-soft: rgba(15, 157, 112, 0.1);
+        --warn: #b8790f;
+        --danger: #d1453b;
+        --ok: #16874f;
+        --purple: #7c5cd6;
+        --blue: #2f7fd1;
+        --shadow: 0 24px 48px rgba(20, 20, 20, 0.1);
+        --bg-blur: rgba(255, 255, 255, 0.85);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      ::selection {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 15.5px;
+        line-height: 1.7;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+        transition:
+          background-color 0.15s ease,
+          color 0.15s ease;
+      }
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+      code,
+      pre {
+        font-family: var(--mono);
+      }
+      code {
+        background: var(--bg-inset);
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        padding: 0.12em 0.42em;
+        font-size: 0.85em;
+        color: var(--blue);
+      }
+      pre {
+        background: var(--bg-inset);
+        margin: 0;
+        padding: 16px 18px;
+        overflow-x: auto;
+        font-size: 0.85em;
+        line-height: 1.65;
+      }
+      pre code {
+        background: none;
+        border: none;
+        padding: 0;
+        color: var(--text);
+        font-size: 1em;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        font-family: var(--sans);
+        font-weight: 650;
+        letter-spacing: -0.02em;
+        color: var(--text);
+      }
+      h1 {
+        font-size: 2.3rem;
+        font-weight: 700;
+      }
+      h2 {
+        font-size: 1.5rem;
+        margin-top: 0;
+        padding-top: 6px;
+        font-weight: 650;
+      }
+      h3 {
+        font-size: 1.08rem;
+        color: var(--text);
+        font-weight: 600;
+        margin-top: 36px;
+      }
+      h3 .h3-dot {
+        color: var(--accent);
+        margin-right: 2px;
+      }
+      p {
+        color: var(--text-dim);
+      }
+      .dim {
+        color: var(--text-faint);
+      }
+      strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      /* ============ Syntax highlighting ============ */
+      .token.keyword,
+      .token.builtin,
+      .token.control-flow {
+        color: var(--tok-keyword);
+      }
+      .token.string,
+      .token.template-string,
+      .token.attr-value {
+        color: var(--tok-string);
+      }
+      .token.function,
+      .token.method {
+        color: var(--tok-fn);
+      }
+      .token.comment {
+        color: var(--tok-comment);
+        font-style: italic;
+      }
+      .token.punctuation {
+        color: var(--tok-punct);
+      }
+      .token.number,
+      .token.boolean {
+        color: var(--tok-num);
+      }
+      .token.class-name,
+      .token.maybe-class-name,
+      .token.tag {
+        color: var(--tok-class);
+      }
+      .token.property,
+      .token.property-access,
+      .token.attr-name {
+        color: var(--tok-prop);
+      }
+      .token.operator,
+      .token.arrow {
+        color: var(--tok-op);
+      }
+      .token.parameter,
+      .token.variable {
+        color: var(--text);
+      }
+      .token.regex {
+        color: var(--tok-string);
+      }
+
+      /* ============ 3-column shell: nav | content | on-this-page ============ */
+      .shell {
+        display: grid;
+        grid-template-columns: 250px minmax(0, 760px) 220px;
+        gap: 0;
+        max-width: 1360px;
+        margin: 0 auto;
+        justify-content: center;
+      }
+
+      .sidebar {
+        width: 250px;
+        position: sticky;
+        top: 0;
+        align-self: flex-start;
+        height: 100vh;
+        overflow-y: auto;
+        padding: 22px 14px 40px 22px;
+        border-right: 1px solid var(--line-soft);
+        scrollbar-width: thin;
+        scrollbar-color: var(--line) transparent;
+      }
+      .sidebar::-webkit-scrollbar {
+        width: 6px;
+      }
+      .sidebar::-webkit-scrollbar-thumb {
+        background: var(--line);
+        border-radius: 6px;
+      }
+
+      .brand-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 2px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+      .mobile-bar .brand {
+        flex: 1;
+        justify-content: center;
+      }
+      .brand-mark {
+        width: 26px;
+        height: 26px;
+        border-radius: 7px;
+        background: var(--accent);
+        color: #00120b;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--mono);
+        font-weight: 800;
+        font-size: 0.8rem;
+        flex-shrink: 0;
+      }
+      .brand-name {
+        font-family: var(--sans);
+        font-weight: 700;
+        font-size: 0.98rem;
+        color: var(--text);
+        letter-spacing: -0.01em;
+      }
+      .brand-tag {
+        font-size: 0.74rem;
+        color: var(--text-faint);
+        margin: 10px 2px 22px;
+        font-family: var(--mono);
+      }
+
+      .search-btn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        margin: 0 0 22px;
+        padding: 7px 10px;
+        background: var(--bg-inset);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--text-faint);
+        font-family: var(--sans);
+        font-size: 0.82rem;
+        cursor: pointer;
+      }
+      .search-btn svg {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+      }
+      .search-btn kbd {
+        margin-left: auto;
+        font-family: var(--mono);
+        font-size: 0.68rem;
+        background: var(--bg-raised);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 1px 5px;
+        color: var(--text-faint);
+      }
+
+      /* ============ Theme toggle ============ */
+      .theme-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        flex-shrink: 0;
+        background: var(--bg-inset);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--text-dim);
+        cursor: pointer;
+      }
+      .theme-toggle:hover {
+        color: var(--text);
+        border-color: var(--line-hover);
+      }
+      .theme-toggle svg {
+        width: 15px;
+        height: 15px;
+      }
+      .theme-toggle .icon-sun {
+        display: none;
+      }
+      :root[data-theme="light"] .theme-toggle .icon-moon {
+        display: none;
+      }
+      :root[data-theme="light"] .theme-toggle .icon-sun {
+        display: block;
+      }
+
+      .nav-group {
+        margin-bottom: 4px;
+      }
+      .nav-label {
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        color: var(--text-faint);
+        margin: 22px 2px 8px;
+        font-weight: 600;
+      }
+      .nav-link {
+        display: block;
+        font-size: 0.855rem;
+        color: var(--text-dim);
+        padding: 6px 10px;
+        border-radius: 7px;
+        border-left: 2px solid transparent;
+        margin-left: -2px;
+        font-weight: 450;
+      }
+      .nav-link:hover {
+        color: var(--text);
+        text-decoration: none;
+        background: var(--bg-hover);
+      }
+      .nav-link.active {
+        color: var(--text);
+        font-weight: 650;
+        background: var(--accent-soft);
+        border-left-color: var(--accent);
+      }
+
+      .content {
+        min-width: 0;
+        padding: 48px 44px 140px;
+        max-width: 760px;
+      }
+      section {
+        margin-bottom: 68px;
+        scroll-margin-top: 24px;
+      }
+      section > h2 .eyebrow {
+        display: block;
+        font-size: 0.72rem;
+        color: var(--accent);
+        font-weight: 700;
+        margin-bottom: 8px;
+        letter-spacing: 0.08em;
+        font-family: var(--mono);
+      }
+
+      .hero {
+        padding-bottom: 32px;
+        border-bottom: 1px solid var(--line-soft);
+        margin-bottom: 48px;
+      }
+      .hero-badges {
+        display: flex;
+        gap: 7px;
+        flex-wrap: wrap;
+        margin: 18px 0;
+      }
+      .badge {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        padding: 4px 10px;
+        border-radius: 100px;
+        border: 1px solid var(--line);
+        color: var(--text-dim);
+        background: var(--bg-raised);
+      }
+      .hero p.lede {
+        font-size: 1.05rem;
+        color: var(--text-dim);
+        max-width: 660px;
+        line-height: 1.7;
+      }
+      .hero-cta {
+        display: flex;
+        gap: 10px;
+        margin-top: 22px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-family: var(--sans);
+        font-size: 0.85rem;
+        font-weight: 600;
+        padding: 9px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        border: 1px solid transparent;
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: #00160e;
+      }
+      .btn-primary:hover {
+        background: #4bf0bb;
+        text-decoration: none;
+      }
+      .btn-ghost {
+        background: var(--bg-raised);
+        color: var(--text);
+        border-color: var(--line);
+      }
+      .btn-ghost:hover {
+        border-color: var(--line-hover);
+        text-decoration: none;
+        background: var(--bg-hover);
+      }
+
+      /* ============ Right rail: on this page ============ */
+      .toc {
+        position: sticky;
+        top: 0;
+        align-self: flex-start;
+        height: 100vh;
+        overflow-y: auto;
+        padding: 48px 24px 40px 20px;
+        scrollbar-width: none;
+      }
+      .toc::-webkit-scrollbar {
+        display: none;
+      }
+      .toc-label {
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        color: var(--text-faint);
+        font-weight: 600;
+        margin-bottom: 12px;
+      }
+      .toc-list {
+        position: relative;
+        border-left: 1px solid var(--line);
+        padding-left: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .toc-item {
+        font-size: 0.8rem;
+        color: var(--text-faint);
+        padding: 4px 0;
+        position: relative;
+        line-height: 1.5;
+        font-weight: 450;
+      }
+      .toc-item:hover {
+        color: var(--text-dim);
+        text-decoration: none;
+      }
+      .toc-item.active {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .toc-item.active::before {
+        content: "";
+        position: absolute;
+        left: -15px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: var(--accent);
+        border-radius: 2px;
+      }
+      .toc-empty {
+        font-size: 0.78rem;
+        color: var(--text-faint);
+        font-style: italic;
+      }
+
+      /* ============ Tables ============ */
+      .table-wrap {
+        overflow-x: auto;
+        margin: 20px 0;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        -webkit-overflow-scrolling: touch;
+      }
+      .table-wrap table {
+        margin: 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+        min-width: 480px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--line-soft);
+      }
+      th {
+        color: var(--text-faint);
+        font-weight: 600;
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        background: var(--bg-inset);
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td code {
+        white-space: nowrap;
+      }
+
+      .callout {
+        border: 1px solid var(--line);
+        border-left: 3px solid var(--accent);
+        background: var(--bg-raised);
+        border-radius: 0 var(--radius) var(--radius) 0;
+        padding: 14px 18px;
+        margin: 20px 0;
+        font-size: 0.88rem;
+        color: var(--text-dim);
+      }
+      .callout.warn {
+        border-left-color: var(--warn);
+      }
+      .callout.warn strong {
+        color: var(--warn);
+      }
+      .callout strong {
+        color: var(--accent);
+      }
+
+      /* ============ Code blocks: terminal-style header w/ traffic lights ============ */
+      .code-block {
+        background: var(--bg-inset);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+        margin: 20px 0;
+      }
+      .code-block-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 12px 10px 14px;
+        border-bottom: 1px solid var(--line);
+        background: var(--bg-raised);
+      }
+      .dots {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        flex-shrink: 0;
+      }
+      .dots span {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .dots .d1 {
+        background: #ff5f57;
+      }
+      .dots .d2 {
+        background: #febc2e;
+      }
+      .dots .d3 {
+        background: #28c840;
+      }
+      .code-block-head-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .code-lang {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .copy-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        color: var(--text-dim);
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 4px 9px;
+        cursor: pointer;
+      }
+      .copy-btn:hover {
+        color: var(--text);
+        border-color: var(--line-hover);
+        background: var(--bg-hover);
+      }
+      .copy-btn svg {
+        width: 12px;
+        height: 12px;
+        flex-shrink: 0;
+      }
+      .copy-btn.copied {
+        color: var(--accent);
+        border-color: var(--accent-dim);
+      }
+      .code-block pre {
+        border-radius: 0;
+        border: none;
+      }
+
+      /* ============ Package-manager tabs (npm / pnpm / yarn) ============ */
+      .pm-tabs {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .pm-tab {
+        font-family: var(--mono);
+        font-size: 0.78rem;
+        color: var(--text-faint);
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 2px 0;
+        position: relative;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
+      .pm-tab::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: -10px;
+        height: 2px;
+        background: transparent;
+        border-radius: 2px;
+      }
+      .pm-tab.active {
+        color: var(--accent);
+      }
+      .pm-tab.active::after {
+        background: var(--accent);
+      }
+      .pm-tab:hover:not(.active) {
+        color: var(--text-dim);
+      }
+      .pm-panes {
+        position: relative;
+      }
+      .pm-pane {
+        display: none;
+      }
+      .pm-pane.active {
+        display: block;
+      }
+
+      /* signature element: trace readout */
+      .trace-panel {
+        background: var(--bg-inset);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 0;
+        overflow: hidden;
+        margin: 22px 0;
+      }
+      .trace-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--line);
+        background: var(--bg-raised);
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .trace-head span {
+        font-family: var(--mono);
+        font-size: 0.74rem;
+        color: var(--text-faint);
+      }
+      .trace-body {
+        padding: 14px 18px;
+        font-family: var(--mono);
+        font-size: 0.8rem;
+        overflow-x: auto;
+      }
+      .trace-row {
+        display: flex;
+        gap: 12px;
+        padding: 3px 0;
+        color: var(--text-dim);
+        white-space: nowrap;
+      }
+      .trace-t {
+        color: var(--text-faint);
+        width: 64px;
+        flex-shrink: 0;
+      }
+      .trace-tag {
+        width: 150px;
+        flex-shrink: 0;
+      }
+      .tag-run {
+        color: var(--accent);
+      }
+      .tag-tool {
+        color: var(--purple);
+      }
+      .tag-hand {
+        color: var(--warn);
+      }
+      .tag-guard {
+        color: var(--danger);
+      }
+      .tag-ok {
+        color: var(--ok);
+      }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        margin: 20px 0;
+      }
+      @media (max-width: 720px) {
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+      }
+      .card {
+        border: 1px solid var(--line);
+        background: var(--bg-raised);
+        border-radius: var(--radius);
+        padding: 16px 18px;
+      }
+      .card h4 {
+        margin: 0 0 8px;
+        font-size: 0.92rem;
+        color: var(--text);
+        font-weight: 600;
+      }
+      .card p {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--text-dim);
+      }
+
+      .footer-nav {
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+        border-top: 1px solid var(--line-soft);
+        padding-top: 24px;
+        margin-top: 56px;
+        font-size: 0.85rem;
+      }
+
+      .menu-toggle {
+        display: none;
+      }
+      .mobile-bar {
+        display: none;
+      }
+      .sidebar-backdrop {
+        display: none;
+      }
+
+      @media (max-width: 1180px) {
+        .shell {
+          grid-template-columns: 250px minmax(0, 1fr);
+        }
+        .toc {
+          display: none;
+        }
+      }
+      @media (max-width: 900px) {
+        .shell {
+          display: block;
+          max-width: 100%;
+        }
+        .sidebar {
+          position: fixed;
+          left: 0;
+          top: 0;
+          z-index: 20;
+          background: var(--bg);
+          width: 82vw;
+          max-width: 280px;
+          transform: translateX(-100%);
+          transition: transform 0.2s ease;
+          box-shadow: var(--shadow);
+          border-right: 1px solid var(--line);
+        }
+        .sidebar.open {
+          transform: translateX(0);
+        }
+        .sidebar-backdrop {
+          display: block;
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.6);
+          z-index: 19;
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.2s ease;
+        }
+        .sidebar-backdrop.open {
+          opacity: 1;
+          pointer-events: auto;
+        }
+        .content {
+          padding: 78px 20px 100px;
+        }
+        .mobile-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          z-index: 30;
+          padding: 12px 16px;
+          background: var(--bg-blur);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          border-bottom: 1px solid var(--line);
+        }
+        .menu-toggle {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: var(--bg-raised);
+          border: 1px solid var(--line);
+          color: var(--text);
+          border-radius: 8px;
+          padding: 7px 12px;
+          font-family: var(--mono);
+          font-size: 0.8rem;
+        }
+        .hero {
+          padding-top: 8px;
+        }
+      }
+      @media (max-width: 520px) {
+        h1 {
+          font-size: 1.7rem;
+        }
+        .content {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+        pre {
+          font-size: 0.78em;
+          padding: 14px;
+        }
+        .hero p.lede {
+          font-size: 1rem;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+        * {
+          transition-duration: 0.001ms !important;
+          animation-duration: 0.001ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="mobile-bar">
+      <button class="menu-toggle" id="menuToggle">☰ menu</button>
+      <div class="brand">
+        <span class="brand-mark">S</span
+        ><span class="brand-name">samai-sdk</span>
+      </div>
+      <button class="theme-toggle" id="themeToggleMobile" type="button" aria-label="Toggle theme">
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </button>
+    </div>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <div class="shell">
+      <nav class="sidebar" id="sidebar">
+        <div class="brand-row">
+          <div class="brand">
+            <span class="brand-mark">S</span
+            ><span class="brand-name">samai-sdk</span>
+          </div>
+          <button class="theme-toggle" id="themeToggleSidebar" type="button" aria-label="Toggle theme">
+            <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          </button>
+        </div>
+        <p class="brand-tag">v0.3.1</p>
+
+        <button class="search-btn" type="button">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          Search docs
+          <kbd>⌘K</kbd>
+        </button>
+
+        <div class="nav-group">
+          <a class="nav-link" href="#overview">Overview</a>
+          <a class="nav-link" href="#install">Installation</a>
+          <a class="nav-link" href="#quickstart">Quick start</a>
+          <a class="nav-link" href="#cli">CLI</a>
+        </div>
+
+        <div class="nav-label">Core concepts</div>
+        <div class="nav-group">
+          <a class="nav-link" href="#tools">Tools &amp; web search</a>
+          <a class="nav-link" href="#mcp">MCP (Model Context Protocol)</a>
+          <a class="nav-link" href="#sandbox">Sandboxed code execution</a>
+          <a class="nav-link" href="#voice">Voice / realtime agents</a>
+          <a class="nav-link" href="#agent-runtime">Agent runtime</a>
+          <a class="nav-link" href="#handoffs">Handoffs</a>
+          <a class="nav-link" href="#guardrails">Guardrails &amp; approval</a>
+          <a class="nav-link" href="#memory">Memory &amp; sessions</a>
+          <a class="nav-link" href="#rag">RAG / vector search</a>
+          <a class="nav-link" href="#structured-output"
+            >Structured output &amp; streaming</a
+          >
+          <a class="nav-link" href="#batch-output"
+            >Batch output &amp; Standard Schema</a
+          >
+          <a class="nav-link" href="#tracing">Tracing</a>
+          <a class="nav-link" href="#reliability">Reliability &amp; timeouts</a>
+          <a class="nav-link" href="#concurrency"
+            >Concurrency &amp; rate limiting</a
+          >
+          <a class="nav-link" href="#resumable-runs">Resumable runs</a>
+          <a class="nav-link" href="#error-handling">Error handling</a>
+        </div>
+
+        <div class="nav-label">Ops &amp; testing</div>
+        <div class="nav-group">
+          <a class="nav-link" href="#observability"
+            >OpenTelemetry &amp; trace viewer</a
+          >
+          <a class="nav-link" href="#usage-ledger">Usage tracking</a>
+          <a class="nav-link" href="#testing">Testing your agents</a>
+          <a class="nav-link" href="#deployment">Deployment</a>
+        </div>
+
+        <div class="nav-label">Reference</div>
+        <div class="nav-group">
+          <a class="nav-link" href="#providers">Model providers</a>
+          <a class="nav-link" href="#prompt-caching">Prompt caching</a>
+          <a class="nav-link" href="#api-reference">API reference</a>
+          <a class="nav-link" href="#react">React</a>
+          <a class="nav-link" href="#vue">Vue</a>
+          <a class="nav-link" href="#svelte">Svelte</a>
+          <a class="nav-link" href="#examples">Examples</a>
+        </div>
+      </nav>
+
+      <main class="content">
+        <section id="overview">
+          <div class="hero">
+            <h1>SamAI SDK</h1>
+            <p class="lede">
+              <code>samai-sdk</code> — a unified AI agent SDK for TypeScript —
+              one API across 8 providers (OpenAI, Anthropic, Google, Groq,
+              Mistral, Ollama, Azure OpenAI, AWS Bedrock), with a from-scratch
+              agent runtime: tool calling, MCP client support, sandboxed code
+              execution, voice/realtime sessions, multi-agent handoffs,
+              guardrails, approval gates, RAG, resumable/checkpointed runs, and
+              fully-traced retries/fallbacks/timeouts — plus React/Vue/Svelte
+              hooks, a CLI, and OpenTelemetry export — built in as first-class
+              citizens.
+            </p>
+            <div class="hero-badges">
+              <span class="badge">TypeScript</span>
+              <span class="badge">MIT licensed</span>
+              <span class="badge">zero framework dependency</span>
+              <span class="badge">provider-agnostic</span>
+              <span class="badge">8 providers</span>
+              <span class="badge">MCP</span>
+              <span class="badge">sandboxed execution</span>
+              <span class="badge">voice/realtime</span>
+              <span class="badge">React / Vue / Svelte</span>
+            </div>
+            <div class="hero-cta">
+              <a class="btn btn-primary" href="#quickstart">Get started</a>
+              <a
+                class="btn btn-ghost"
+                href="https://github.com/Sameer9823/samai-sdk"
+                target="_blank"
+                rel="noopener"
+                >GitHub →</a
+              >
+            </div>
+            <p class="dim" style="margin-top: 22px">
+              This page is the full reference — you shouldn't need to read the
+              source to use the SDK. Every section below has runnable code.
+            </p>
+          </div>
+
+          <h3><span class="h3-dot">›</span>Who this is for</h3>
+          <p>
+            Developers building LLM-agent features in a Node/TypeScript codebase
+            who don't want to adopt a heavyweight framework's opinions about
+            state, storage, or orchestration — but also don't want to hand-roll
+            tool-calling loops, retry logic, and handoff bookkeeping themselves
+            for the third time this year.
+          </p>
+
+          <h3><span class="h3-dot">›</span>What it solves</h3>
+          <p>
+            Every team building agents ends up writing the same primitives — a
+            tool-execution loop, a way to hand off between specialized agents,
+            guardrails that don't silently swallow errors, a place to put
+            conversation memory, and some way to see what actually happened
+            during a run. <code>samai-sdk</code> implements those primitives
+            once, directly against provider APIs, so swapping
+            <code>anthropic()</code> for <code>openai()</code> doesn't change
+            how your agent behaves.
+          </p>
+
+          <h3><span class="h3-dot">›</span>How it differs</h3>
+          <div class="grid-2">
+            <div class="card">
+              <h4>Provider-neutral by construction</h4>
+              <p>
+                The agent runtime never talks to a provider SDK directly — it
+                only depends on the <code>Provider</code> interface, so the same
+                handoff/guardrail/tracing logic runs identically on Claude, GPT,
+                or Gemini.
+              </p>
+            </div>
+            <div class="card">
+              <h4>Fails closed, not silent</h4>
+              <p>
+                Approval-gated tools reject by default with no handler
+                configured. Guardrails throw typed errors with the reason
+                attached. Nothing quietly no-ops.
+              </p>
+            </div>
+            <div class="card">
+              <h4>Tracing isn't bolted on</h4>
+              <p>
+                Every run produces a structured <code>RunTrace</code> — model
+                calls, tool calls, handoffs, retries, fallbacks, timeouts,
+                guardrail trips, approvals, token usage, timing — for free, not
+                as an opt-in addon.
+              </p>
+            </div>
+            <div class="card">
+              <h4>Real timeouts</h4>
+              <p>
+                <code>withTimeout()</code> uses an actual
+                <code>AbortController</code> deadline. It doesn't infer "this
+                looks like a timeout" from an error string after the fact.
+              </p>
+            </div>
+          </div>
+          <p>
+            Most agent frameworks pick a lane: a thin provider wrapper with no
+            orchestration, or a full framework with its own state/deployment
+            model that really only shines on one vendor. This sits deliberately
+            in between — real orchestration, provider-agnostic by construction,
+            on a runtime you can still read end to end (~6,900 lines across
+            <code>src/</code>) when something misbehaves, rather than spelunking
+            through a dependency tree.
+          </p>
+        </section>
+
+        <section id="install">
+          <h2><span class="eyebrow">01 · GETTING STARTED</span>Installation</h2>
+          <p>
+            Install the core package, then add whichever provider SDKs you
+            actually use — they're optional peer dependencies, loaded lazily, so
+            you never pay for the ones you skip.
+          </p>
+
+          <div class="code-block">
+            <div class="code-block-head">
+              <div class="code-block-head-left">
+                <span class="dots"
+                  ><span class="d1"></span><span class="d2"></span
+                  ><span class="d3"></span
+                ></span>
+                <div class="pm-tabs" id="pmTabs">
+                  <button class="pm-tab active" data-pm="npm">npm</button>
+                  <button class="pm-tab" data-pm="pnpm">pnpm</button>
+                  <button class="pm-tab" data-pm="yarn">yarn</button>
+                </div>
+              </div>
+              <button class="copy-btn" data-copy-target="pmActivePane">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="9" y="9" width="13" height="13" rx="2" />
+                  <path
+                    d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                  />
+                </svg>
+                <span>Copy</span>
+              </button>
+            </div>
+            <div class="pm-panes" id="pmPanes">
+              <pre
+                class="pm-pane active"
+                data-pm="npm"
+              ><code>npm install samai-sdk
+
+# plus whichever provider SDKs you actually use:
+npm install @anthropic-ai/sdk      # for anthropic()
+npm install openai                 # for openai()
+npm install @google/generative-ai  # for google()
+
+# other optional peer deps, same lazy-load pattern:
+npm install @modelcontextprotocol/sdk  # for createMCPClient()
+npm install ws                         # for createRealtimeSession()
+npm install ioredis                    # for RedisSessionStore
+npm install better-sqlite3             # for SqliteSessionStore</code></pre>
+              <pre class="pm-pane" data-pm="pnpm"><code>pnpm add samai-sdk
+
+# plus whichever provider SDKs you actually use:
+pnpm add @anthropic-ai/sdk      # for anthropic()
+pnpm add openai                 # for openai()
+pnpm add @google/generative-ai  # for google()
+
+# other optional peer deps, same lazy-load pattern:
+pnpm add @modelcontextprotocol/sdk  # for createMCPClient()
+pnpm add ws                         # for createRealtimeSession()
+pnpm add ioredis                    # for RedisSessionStore
+pnpm add better-sqlite3             # for SqliteSessionStore</code></pre>
+              <pre class="pm-pane" data-pm="yarn"><code>yarn add samai-sdk
+
+# plus whichever provider SDKs you actually use:
+yarn add @anthropic-ai/sdk      # for anthropic()
+yarn add openai                 # for openai()
+yarn add @google/generative-ai  # for google()
+
+# other optional peer deps, same lazy-load pattern:
+yarn add @modelcontextprotocol/sdk  # for createMCPClient()
+yarn add ws                         # for createRealtimeSession()
+yarn add ioredis                    # for RedisSessionStore
+yarn add better-sqlite3             # for SqliteSessionStore</code></pre>
+            </div>
+          </div>
+          <p class="dim">
+            Node ≥ 18. TypeScript ≥ 5 recommended for the fully-typed exports.
+          </p>
+        </section>
+
+        <section id="quickstart">
+          <h2><span class="eyebrow">02 · GETTING STARTED</span>Quick start</h2>
+          <p>
+            The lowest-level surface is <code>createClient()</code> + a provider
+            — a single tool-calling round-trip with no agent runtime involved:
+          </p>
+          <pre><code>import { createClient, anthropic, defineTool } from "samai-sdk";
+import { z } from "zod";
+
+const getWeather = defineTool({
+  name: "get_weather",
+  description: "Get current weather for a city",
+  parameters: z.object({ city: z.string() }),
+  execute: async ({ city }) => ({ city, tempC: 28, condition: "sunny" }),
+});
+
+const client = createClient({
+  provider: anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }),
+});
+
+const result = await client.generate({
+  model: "claude-sonnet-4-6",
+  system: "You are a concise assistant.",
+  messages: [{ role: "user", content: "What's the weather in Chennai?" }],
+  tools: [getWeather],
+  maxToolRoundtrips: 2,
+});
+
+console.log(result.text);</code></pre>
+          <p>Swap providers without touching anything else:</p>
+          <pre><code>import { openai, google } from "samai-sdk";
+
+const client = createClient({ provider: openai({ apiKey: "..." }) });
+// or
+const client = createClient({ provider: google({ apiKey: "..." }) });</code></pre>
+          <p>
+            For anything with multiple turns, tools, and possibly other agents
+            involved, reach for the
+            <a href="#agent-runtime">agent runtime</a> instead of driving
+            <code>client.generate()</code> yourself.
+          </p>
+        </section>
+
+        <section id="cli">
+          <h2><span class="eyebrow">03 · GETTING STARTED</span>CLI</h2>
+          <pre><code>npx samai-sdk create &lt;directory&gt; [--provider anthropic|openai|groq|ollama]
+npx samai-sdk trace &lt;trace-file.json&gt; [--port 4949]</code></pre>
+          <p>
+            <code>create</code> scaffolds a runnable starter project —
+            <code>package.json</code>, <code>tsconfig.json</code>,
+            <code>.env.example</code>, and a <code>src/index.ts</code> with one
+            agent and one tool, wired to whichever provider you picked. It
+            refuses to overwrite an existing directory rather than clobbering
+            one silently.
+          </p>
+          <pre><code>npx samai-sdk create my-agent --provider groq
+cd my-agent
+npm install
+cp .env.example .env   # add your API key
+npm start</code></pre>
+          <p>
+            <code>trace</code> serves a rendered, interactive timeline for a
+            saved <code>RunTrace</code> JSON file over a local HTTP server — see
+            <a href="#observability">OpenTelemetry &amp; trace viewer</a> below.
+          </p>
+          <pre><code>npx samai-sdk trace ./trace.json --port 4949
+# ✅ Trace viewer running at http://localhost:4949</code></pre>
+          <p class="dim">
+            See <code>examples/cli-mock-test.ts</code> — it runs the actual
+            built <code>dist/cli.js</code> binary and typechecks the scaffolded
+            output against this repo's real, built types, not just asserting
+            files exist.
+          </p>
+        </section>
+
+        <section id="tools">
+          <h2><span class="eyebrow">04 · CORE CONCEPTS</span>Tools</h2>
+          <p>
+            <code>defineTool()</code> bundles a name, description, a zod schema
+            for arguments, and an <code>execute</code> function. Arguments are
+            validated against the schema before <code>execute</code> ever runs,
+            and both sync and async <code>execute</code> functions are
+            supported.
+          </p>
+          <pre><code>import { defineTool } from "samai-sdk";
+import { z } from "zod";
+
+const lookupOrder = defineTool({
+  name: "lookup_order",
+  description: "Fetch an order by ID",
+  parameters: z.object({ orderId: z.string().uuid() }),
+  execute: async ({ orderId }) => {
+    const order = await db.orders.findById(orderId); // async is fine
+    if (!order) throw new Error(`No order found for ${orderId}`);
+    return order; // typed as whatever execute() returns
+  },
+});</code></pre>
+          <p>
+            Failures inside <code>execute</code> (including schema-validation
+            failures, timeouts, and rejected approvals — see
+            <a href="#guardrails">Guardrails &amp; approval</a>) never throw out
+            of the run. They're captured as an <code>isError</code> tool result
+            and fed back to the model, which can retry, ask a clarifying
+            question, or explain the failure to the end user.
+          </p>
+          <h3><span class="h3-dot">›</span>Tool anatomy</h3>
+          <div class="table-wrap">
+            <table>
+              <tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Notes</th>
+              </tr>
+              <tr>
+                <td><code>name</code></td>
+                <td><code>string</code></td>
+                <td>Unique per agent; the model calls tools by this name</td>
+              </tr>
+              <tr>
+                <td><code>description</code></td>
+                <td><code>string</code></td>
+                <td>Shown to the model — be specific about when to use it</td>
+              </tr>
+              <tr>
+                <td><code>parameters</code></td>
+                <td><code>z.ZodType</code></td>
+                <td>Validated before <code>execute</code> runs</td>
+              </tr>
+              <tr>
+                <td><code>execute</code></td>
+                <td><code>(args) => Result | Promise&lt;Result&gt;</code></td>
+                <td>Return value becomes the tool result</td>
+              </tr>
+              <tr>
+                <td><code>requiresApproval</code></td>
+                <td><code>boolean | (args) => boolean</code></td>
+                <td>
+                  Gate this tool behind human sign-off — see
+                  <a href="#guardrails">Guardrails</a>
+                </td>
+              </tr>
+              <tr>
+                <td><code>timeoutMs</code></td>
+                <td><code>number</code></td>
+                <td>Per-tool execution deadline (default 30s)</td>
+              </tr>
+            </table>
+          </div>
+
+          <h3><span class="h3-dot">›</span>Built-in: web search</h3>
+          <p>
+            <code>createWebSearchTool()</code> gives the model a real,
+            ready-to-use <code>web_search</code> tool — backed by an actual HTTP
+            call to the Tavily or Brave search API, not a stub. Get a key at
+            <a href="https://tavily.com" target="_blank" rel="noopener"
+              >tavily.com</a
+            >
+            or
+            <a
+              href="https://brave.com/search/api"
+              target="_blank"
+              rel="noopener"
+              >brave.com/search/api</a
+            >.
+          </p>
+          <pre><code>import { createWebSearchTool, defineAgent } from "samai-sdk";
+
+const researcher = defineAgent({
+  name: "researcher",
+  instructions: "Use web_search for anything time-sensitive or after your training cutoff.",
+  model: "claude-sonnet-4-6",
+  tools: [createWebSearchTool({ apiKey: process.env.TAVILY_API_KEY })], // or { provider: "brave" }
+});</code></pre>
+          <p class="dim">
+            If no <code>apiKey</code> is supplied and no
+            <code>TAVILY_API_KEY</code>/<code>BRAVE_API_KEY</code> env var is
+            set, the tool throws a clear configuration error as an
+            <code>isError</code> tool result — it never fails silently.
+          </p>
+        </section>
+
+        <section id="mcp">
+          <h2>
+            <span class="eyebrow">05 · CORE CONCEPTS</span>MCP (Model Context
+            Protocol)
+          </h2>
+          <p>
+            <code>createMCPClient()</code> connects to any MCP server and
+            exposes its tools as ordinary <code>ToolDefinition</code>s — mix
+            them into an agent's <code>tools</code> array alongside
+            locally-defined tools, <code>createWebSearchTool()</code>, whatever.
+            Needs the optional <code>@modelcontextprotocol/sdk</code> peer
+            dependency (<code>npm install @modelcontextprotocol/sdk</code>).
+          </p>
+          <pre><code>import { createClient, anthropic, defineAgent, runAgent, createMCPClient } from "samai-sdk";
+
+// Local server, spawned as a child process over stdio:
+const filesystem = createMCPClient({
+  transport: { transport: "stdio", command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"] },
+  toolPrefix: "fs", // avoids name collisions if you wire up more than one MCP server
+});
+
+const client = createClient({ provider: anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) });
+
+const agent = defineAgent({
+  name: "file_assistant",
+  instructions: "Help the user inspect and organize files in /tmp using the fs__ tools.",
+  model: "claude-sonnet-4-6",
+  tools: await filesystem.tools(),
+});
+
+const result = await runAgent(client, agent, "What files are in /tmp?");
+await filesystem.close(); // kills the spawned process</code></pre>
+          <p>
+            Remote servers work the same way, over the current Streamable HTTP
+            transport (or legacy SSE, for older servers):
+          </p>
+          <pre><code>const acme = createMCPClient({
+  transport: { transport: "http", url: "https://mcp.acme.com/mcp", headers: { Authorization: `Bearer ${token}` } },
+  toolPrefix: "acme",
+});</code></pre>
+          <p class="dim">
+            Each MCP tool's JSON Schema reaches the model exactly as the server
+            declares it (via <code>ToolDefinition.rawJsonSchema</code>, an
+            escape hatch every built-in provider adapter checks first) — nothing
+            is lost round-tripping through zod. Argument validation before a
+            call reaches the server is a permissive "is this an object" check,
+            since the server itself is the source of truth for its own schema.
+            Call results come back as <code>structuredContent</code> when the
+            server provides it, otherwise as flattened text. Pass
+            <code>requiresApproval</code> (boolean, or
+            <code>(toolName, args) =&gt; boolean | Promise&lt;boolean&gt;</code
+            >) to gate every tool from a server behind the same approval flow as
+            any other tool — see
+            <a href="#guardrails">Guardrails &amp; approval</a>.
+          </p>
+        </section>
+
+        <section id="sandbox">
+          <h2>
+            <span class="eyebrow">06 · CORE CONCEPTS</span>Sandboxed code
+            execution
+          </h2>
+          <p>
+            <code>createSandbox()</code> gives an agent an isolated temp
+            directory to run real JavaScript/Python/bash in and read/write files
+            against — the primitive behind "long-horizon" coding-agent behavior
+            (inspect files, run commands, edit code, repeat).
+            <code>createCodeExecutionTool()</code> wraps it as a single
+            <code>execute_code</code> tool;
+            <code>createSandboxTools()</code> bundles that with
+            <code>write_file</code>/<code>read_file</code>/<code
+              >list_files</code
+            >
+            against the same sandbox, so a model can write a file with one tool
+            and run it with another across turns.
+          </p>
+          <pre><code>import { createClient, anthropic, defineAgent, runAgent, createSandbox, createSandboxTools } from "samai-sdk";
+
+const sandbox = createSandbox();
+const client = createClient({ provider: anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) });
+
+const agent = defineAgent({
+  name: "coder",
+  instructions: "Write and test code using write_file and execute_code. JavaScript runs as an ES module.",
+  model: "claude-sonnet-4-6",
+  tools: createSandboxTools(sandbox),
+});
+
+const result = await runAgent(client, agent, "Write fibonacci.py, run it, and tell me the output.");
+await sandbox.close(); // deletes the temp directory</code></pre>
+          <p>
+            For a single one-shot execution tool without file persistence, use
+            <code>createCodeExecutionTool()</code> directly:
+            <code
+              >tools: [createCodeExecutionTool({ languages: ["javascript",
+              "python"] })]</code
+            >.
+          </p>
+          <p class="dim">
+            <strong
+              >What "sandboxed" means here — read before using this with
+              untrusted input.</strong
+            >
+            Every execution gets its own cwd (file I/O is confined to it — path
+            traversal via <code>../</code> is rejected), a minimal environment
+            (only <code>PATH</code>/<code>HOME</code>/<code>TMPDIR</code> — your
+            process's other env vars, including API keys, are
+            <strong>not</strong> inherited by executed code), a wall-clock
+            timeout that actually kills the process (<code>SIGKILL</code>,
+            verified against a real <code>sleep</code> in the test suite), and a
+            byte-accurate output-truncation cap. This is process-level
+            isolation, not OS-level: there's no container, VM, or network
+            namespace. Fine for your own experimentation or a trusted model with
+            shell access; for untrusted code or multiple tenants, run this SDK
+            itself inside an actual container/VM and point <code>dir</code> at a
+            path inside that boundary. Supported languages:
+            <code>"javascript"</code> (ES module via <code>node</code> —
+            <code>import</code>, not <code>require</code>),
+            <code>"python"</code> (via <code>python3</code>, must be on
+            <code>PATH</code>), <code>"bash"</code> (via
+            <code>/bin/bash -c</code>).
+          </p>
+        </section>
+
+        <section id="voice">
+          <h2>
+            <span class="eyebrow">07 · CORE CONCEPTS</span>Voice / realtime
+            agents
+          </h2>
+          <div class="callout warn">
+            <strong>Heads up.</strong> <code>generateSpeech()</code>/<code
+              >transcribeAudio()</code
+            >
+            are straightforward REST calls (same shape as
+            <code>createWebSearchTool()</code>) but haven't been exercised
+            against a live key from this SDK's dev environment.
+            <code>createRealtimeSession()</code>'s wire-protocol logic
+            <em>has</em> been verified against a real local mock WebSocket
+            server — catching and fixing a real race condition and an auth bug
+            in the process — but the exact event names/fields haven't been
+            confirmed against OpenAI's live server, since that API moves
+            quickly. Read the disclaimer at the top of
+            <code>src/voice.ts</code> before production use.
+          </div>
+          <p>
+            <code>generateSpeech()</code> and
+            <code>transcribeAudio()</code> wrap OpenAI's TTS and Whisper REST
+            endpoints:
+          </p>
+          <pre><code>import { generateSpeech, transcribeAudio } from "samai-sdk";
+import { writeFile, readFile } from "node:fs/promises";
+
+const { audio } = await generateSpeech({ input: "Hello there!", voice: "nova" });
+await writeFile("out.mp3", audio);
+
+const { text } = await transcribeAudio({ audio: await readFile("recording.mp3"), filename: "recording.mp3" });</code></pre>
+          <p>
+            <code>createRealtimeSession()</code> opens a bidirectional, streamed
+            voice session with your agent's tools wired in:
+          </p>
+          <pre><code>import { createRealtimeSession } from "samai-sdk";
+
+const session = createRealtimeSession({
+  instructions: "You are a helpful, concise voice assistant.",
+  voice: "alloy",
+  tools: [getWeatherTool], // any ToolDefinition[] — called automatically when the model invokes them
+});
+
+session.on((event) => {
+  if (event.type === "audio.delta") playAudioChunk(event.audio); // your speaker output
+  if (event.type === "speech_started") stopSpeakerPlayback(); // user talking over the assistant — barge-in
+});
+
+await session.connect();
+session.sendText("What's the weather in Tokyo?");
+session.interrupt(); // cancels the in-flight response, the instant you detect a barge-in
+await session.close();</code></pre>
+          <p class="dim">
+            Handles the network/protocol side only — pairing it with actual mic
+            capture and speaker playback is up to your app. On Node &lt; 22, or
+            for header-based auth (recommended), install the optional
+            <code>ws</code> peer dependency; without it, connections fall back
+            to OpenAI's documented subprotocol-based auth, since the standard
+            <code>WebSocket</code> global can't send custom headers at all.
+          </p>
+        </section>
+
+        <section id="agent-runtime">
+          <h2><span class="eyebrow">08 · CORE CONCEPTS</span>Agent runtime</h2>
+          <p>
+            <code>defineAgent()</code> bundles instructions, a model, tools,
+            optional handoffs, guardrails, and an output schema into one named,
+            reusable unit. <code>runAgent()</code> (or
+            <code>runAgentStream()</code> for live events) is the actual agent
+            loop — it owns tool execution and multi-turn orchestration itself,
+            so behavior is identical no matter which provider backs the agent.
+          </p>
+          <pre><code>import { z } from "zod";
+import { createClient, anthropic, defineAgent, runAgent } from "samai-sdk";
+
+const client = createClient({ provider: anthropic({ apiKey: "..." }) });
+
+const getWeather = defineTool({
+  name: "get_weather",
+  description: "Get the current weather for a city",
+  parameters: z.object({ city: z.string() }),
+  execute: async ({ city }) => `18C and cloudy in ${city}`,
+});
+
+const agent = defineAgent({
+  name: "trip_planner",
+  instructions: "Look up weather, then give concise packing advice.",
+  model: "claude-sonnet-4-6",
+  tools: [getWeather],
+  maxTurns: 10, // safe stopping condition — throws MaxTurnsExceededError past this
+});
+
+const result = await runAgent(client, agent, "What should I pack for Tokyo?");
+console.log(result.output);       // the agent's final answer
+console.log(result.finalAgent);   // "trip_planner"
+console.log(result.trace);        // full RunTrace — see Tracing below</code></pre>
+          <p>
+            The loop: send messages + tools to the model → detect tool calls →
+            run tool guardrails and approval gates → execute tools → feed
+            results back → repeat until a final answer with no tool calls, a
+            handoff, or a stopping condition (<code>maxTurns</code>, an absolute
+            turn cap, or an unhandled error).
+          </p>
+          <h3><span class="h3-dot">›</span>Streaming events</h3>
+          <p>
+            Use <code>runAgentStream()</code> directly to consume events as the
+            run progresses — useful for driving a chat UI:
+          </p>
+          <pre><code>for await (const event of runAgentStream(client, agent, "What should I pack for Tokyo?")) {
+  switch (event.type) {
+    case "text-delta": process.stdout.write(event.textDelta); break;
+    case "tool-started": console.log("calling", event.toolName, event.args); break;
+    case "tool-completed": console.log("tool result", event.result); break;
+    case "handoff-started": console.log(`${event.fromAgent} -> ${event.toAgent}`); break;
+    case "guardrail-triggered": console.warn(`${event.stage} guardrail blocked: ${event.reason}`); break;
+    case "approval-requested": console.log("needs approval:", event.toolName); break;
+    case "approval-resolved": console.log("approval:", event.toolName, event.approved); break;
+    case "run-completed": console.log("done", event.usage); break;
+    case "run-failed": console.error(event.error); break;
+  }
+}</code></pre>
+        </section>
+
+        <section id="handoffs">
+          <h2><span class="eyebrow">09 · CORE CONCEPTS</span>Handoffs</h2>
+          <p>
+            Any agent listed in another agent's <code>handoffs</code> becomes
+            callable as a synthetic tool the model can invoke like any other
+            tool call. The run loop intercepts these before normal tool
+            execution, switches the active agent, and carries the full message
+            history forward — the new agent sees everything that happened before
+            the handoff.
+          </p>
+          <pre><code>const packingAgent = defineAgent({
+  name: "packing_specialist",
+  instructions: "Give concise packing advice based on weather info already in the conversation.",
+  model: "claude-sonnet-4-6",
+});
+
+const routerAgent = defineAgent({
+  name: "trip_router",
+  instructions: "Look up weather, then hand off to packing_specialist for advice.",
+  model: "claude-sonnet-4-6",
+  tools: [getWeather],
+  handoffs: [packingAgent],
+});
+
+const result = await runAgent(client, routerAgent, "What should I pack for Tokyo?");
+console.log(result.finalAgent);      // "packing_specialist" — may differ from the starting agent
+console.log(result.trace.agentPath); // ["trip_router", "packing_specialist"]</code></pre>
+          <h3><span class="h3-dot">›</span>Loop prevention</h3>
+          <p>
+            To prevent infinite delegation (A → B → A → B → ...), the run loop
+            tracks every agent visited in a run: handing off to an
+            already-visited agent throws <code>HandoffLoopError</code>, and a
+            hard <code>maxHandoffs</code> cap (default 5, override via
+            <code>runAgent(client, agent, input, { maxHandoffs: 10 })</code>)
+            catches runaway delegation even across distinct agents.
+          </p>
+          <pre><code>try {
+  await runAgent(client, routerAgent, input);
+} catch (err) {
+  if (err instanceof AgentRunError) {
+    console.error(err.cause);        // HandoffLoopError, MaxTurnsExceededError, etc.
+    console.error(err.trace.events); // full trace up to the point of failure
+  }
+}</code></pre>
+          <p class="dim">
+            Every handoff appears in the trace as a <code>handoff</code> event
+            and in <code>trace.agentPath</code>, so delegation is always visible
+            in logs — never a silent jump.
+          </p>
+        </section>
+
+        <section id="guardrails">
+          <h2>
+            <span class="eyebrow">10 · CORE CONCEPTS</span>Guardrails &amp;
+            approval
+          </h2>
+          <p>
+            Four layers, each solving a different part of "validate before/after
+            execution":
+          </p>
+          <div class="grid-2">
+            <div class="card">
+              <h4>Input guardrails</h4>
+              <p>
+                Run before a call reaches the model. Reject invalid input,
+                redact PII, or block prompt-injection attempts.
+              </p>
+            </div>
+            <div class="card">
+              <h4>Output guardrails</h4>
+              <p>
+                Run after a response comes back. Validate structured output,
+                strip sensitive info, cap spend.
+              </p>
+            </div>
+            <div class="card">
+              <h4>Tool guardrails</h4>
+              <p>
+                Run before a specific tool call executes. Block by tool name or
+                by inspecting arguments for dangerous patterns.
+              </p>
+            </div>
+            <div class="card">
+              <h4>Approval gates</h4>
+              <p>
+                Pause a specific tool call for human sign-off rather than
+                blocking it outright. Fails closed with no handler configured.
+              </p>
+            </div>
+          </div>
+
+          <h3><span class="h3-dot">›</span>Input / output guardrails</h3>
+          <pre><code>import { createClient, anthropic, createPiiInputGuardrail, createPromptInjectionGuardrail, createBudgetGuardrail } from "samai-sdk";
+
+const budget = createBudgetGuardrail({ maxCostUsd: 5.0 });
+
+const client = createClient({
+  provider: anthropic({ apiKey: "..." }),
+  inputGuardrails: [
+    createPiiInputGuardrail({ mode: "redact" }),
+    createPromptInjectionGuardrail({ mode: "block" }),
+    budget.inputGuardrail,
+  ],
+  outputGuardrails: [budget.outputGuardrail],
+});</code></pre>
+          <p>
+            Or write your own — an <code>InputGuardrail</code>/<code
+              >OutputGuardrail</code
+            >
+            is just a function returning <code>{ allowed, reason? }</code>:
+          </p>
+          <pre><code>const client = createClient({
+  provider: anthropic({ apiKey: "..." }),
+  inputGuardrails: [
+    async ({ messages }) => {
+      const last = messages.at(-1);
+      const text = typeof last?.content === "string" ? last.content : "";
+      return text.includes("secret-password")
+        ? { allowed: false, reason: "contains sensitive term" }
+        : { allowed: true };
+    },
+  ],
+});</code></pre>
+
+          <h3><span class="h3-dot">›</span>Tool guardrails</h3>
+          <p>Run automatically before every tool call, scoped per-agent:</p>
+          <pre><code>import { defineAgent, createDangerousToolGuardrail } from "samai-sdk";
+
+const opsAgent = defineAgent({
+  name: "ops_agent",
+  instructions: "...",
+  model: "claude-sonnet-4-6",
+  tools: [wipeDatabase, sendEmail],
+  guardrails: {
+    tool: [createDangerousToolGuardrail({ blockedTools: ["wipe_database"] })],
+  },
+});</code></pre>
+          <div class="callout">
+            <strong>Built-in patterns.</strong>
+            <code>createDangerousToolGuardrail()</code> also blocks calls whose
+            serialized arguments match common destructive patterns (<code
+              >rm -rf</code
+            >, unscoped <code>DROP TABLE</code>/<code
+              >DELETE FROM ... WHERE 1=1</code
+            >, <code>sudo</code>) by default, on top of any tool names you block
+            explicitly.
+          </div>
+
+          <h3><span class="h3-dot">›</span>Approval gates</h3>
+          <p>
+            Mark a tool with <code>requiresApproval</code>, then supply
+            <code>onApprovalRequest</code> when running the agent:
+          </p>
+          <pre><code>const sendEmail = defineTool({
+  name: "send_email",
+  description: "Sends an email to the given address",
+  parameters: z.object({ to: z.string(), body: z.string() }),
+  execute: async ({ to, body }) => { /* ... */ },
+  requiresApproval: true, // or (args) => args.to !== "internal-test@example.com"
+});
+
+await runAgent(client, opsAgent, "Email the team about the deploy", {
+  onApprovalRequest: async ({ toolName, args }) => {
+    // Wire this to a UI confirm dialog, a Slack Approve/Reject message,
+    // a CLI prompt — whatever fits. Return true to allow the call.
+    return await askHumanToApprove(toolName, args);
+  },
+});</code></pre>
+          <div class="callout warn">
+            <strong>Fails closed by default.</strong> If
+            <code>onApprovalRequest</code> is omitted entirely, approval-gated
+            tools are rejected automatically — a risky action never runs
+            unattended just because nobody wired up a handler yet.
+          </div>
+          <p>
+            Both tool guardrails and approvals show up in the trace (<code
+              >guardrail-triggered</code
+            >
+            with <code>stage: "tool"</code>, plus
+            <code>approval-requested</code>/<code>approval-resolved</code>) and
+            as streamed <code>runAgentStream()</code> events.
+          </p>
+
+          <h3><span class="h3-dot">›</span>Structured-output guardrail</h3>
+          <pre><code>import { createSchemaGuardrail } from "samai-sdk";
+import { z } from "zod";
+
+const client = createClient({
+  provider: anthropic({ apiKey: "..." }),
+  outputGuardrails: [createSchemaGuardrail(z.object({ summary: z.string(), score: z.number() }))],
+});</code></pre>
+        </section>
+
+        <section id="memory">
+          <h2>
+            <span class="eyebrow">11 · CORE CONCEPTS</span>Memory &amp; sessions
+          </h2>
+          <p>
+            A <code>Session</code> persists conversation history across separate
+            <code>runAgent()</code> calls — kept deliberately distinct from
+            <code>defineAgent()</code> (static configuration) and the transient
+            message list a single run builds up internally.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <tr>
+                <th>Concept</th>
+                <th>Lifetime</th>
+                <th>Holds</th>
+              </tr>
+              <tr>
+                <td>Agent config (<code>defineAgent()</code>)</td>
+                <td>Defined once, reused everywhere</td>
+                <td>Instructions, model, tools, guardrails, handoffs</td>
+              </tr>
+              <tr>
+                <td>Run state</td>
+                <td>One <code>runAgent()</code> call</td>
+                <td>
+                  Messages built up during that run, current turn/handoff
+                  counters
+                </td>
+              </tr>
+              <tr>
+                <td>Session state</td>
+                <td>Across many <code>runAgent()</code> calls</td>
+                <td>
+                  Persisted conversation history, via a pluggable
+                  <code>SessionStore</code>
+                </td>
+              </tr>
+            </table>
+          </div>
+          <pre><code>import {
+  createSession,
+  InMemorySessionStore,
+  FileSessionStore,
+  RedisSessionStore,
+  SqliteSessionStore,
+} from "samai-sdk";
+
+// Lives for the process lifetime — good for scripts and tests:
+const session = createSession("user-123", new InMemorySessionStore());
+
+// Persists to disk as JSON — survives process restarts, no extra infra:
+const fileSession = createSession("user-123", new FileSessionStore("./sessions"));
+
+// Persists to Redis — shared across processes/instances, optional TTL expiry.
+// Needs the optional `ioredis` peer dependency.
+const redisSession = createSession(
+  "user-123",
+  new RedisSessionStore({ url: process.env.REDIS_URL, ttlSeconds: 60 * 60 * 24 })
+);
+
+// Persists to a local SQLite file — durable, no external server needed.
+// Needs the optional `better-sqlite3` peer dependency.
+const sqliteSession = createSession("user-123", new SqliteSessionStore({ path: "./data/sessions.db" }));
+
+await runAgent(client, agent, "What should I pack for Tokyo?", { session });
+await runAgent(client, agent, "What about shoes?", { session }); // sees the prior turn</code></pre>
+          <p>
+            All four stores implement the same three-method
+            <code>SessionStore</code> interface (<code>getMessages</code> /
+            <code>appendMessages</code> / <code>clear</code>) — swap between
+            them, or write your own for Postgres, DynamoDB, etc., without
+            touching call sites. <code>RedisSessionStore</code> also accepts an
+            already-connected client via <code>{ client }</code> if you manage
+            your own connection pool.
+          </p>
+        </section>
+
+        <section id="rag">
+          <h2>
+            <span class="eyebrow">12 · CORE CONCEPTS</span>RAG / vector search
+          </h2>
+          <p>
+            Three independently swappable pieces: an
+            <code>EmbeddingProvider</code> (text → vectors), a
+            <code>VectorStore</code> (stores/searches vectors), and
+            <code>createRetrievalTool()</code> (wires them into something the
+            model can call).
+          </p>
+          <pre><code>import {
+  createClient, anthropic, defineAgent, runAgent,
+  openaiEmbeddings, InMemoryVectorStore, createRetrievalTool, embedChunks,
+} from "samai-sdk";
+
+const embeddings = openaiEmbeddings({ apiKey: process.env.OPENAI_API_KEY }); // needs `openai` installed
+const store = new InMemoryVectorStore(); // or `new PineconeVectorStore({ indexHost: "..." })` for production
+
+// Ingest: embed your chunks once, upsert into the store.
+const records = await embedChunks(embeddings, [
+  { id: "doc-1", text: "Refunds are processed within 3-5 business days." },
+  { id: "doc-2", text: "Reset your password from Settings &gt; Security." },
+]);
+await store.upsert(records);
+
+// Give the agent a tool that can search what you just ingested.
+const supportAgent = defineAgent({
+  name: "support_agent",
+  instructions: "Use retrieve_knowledge to ground answers in the docs before replying.",
+  model: "claude-sonnet-4-6",
+  tools: [createRetrievalTool({ embeddings, store, options: { topK: 3 } })],
+});
+
+const client = createClient({ provider: anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) });
+const result = await runAgent(client, supportAgent, "How long do refunds take?");</code></pre>
+          <div class="table-wrap">
+            <table>
+              <tr>
+                <th>Piece</th>
+                <th>Notes</th>
+              </tr>
+              <tr>
+                <td><code>InMemoryVectorStore</code></td>
+                <td>
+                  Brute-force cosine similarity, zero setup — fine for
+                  prototyping and a few thousand vectors
+                </td>
+              </tr>
+              <tr>
+                <td><code>PineconeVectorStore({ indexHost, apiKey })</code></td>
+                <td>
+                  Talks to Pinecone's REST API directly over <code>fetch</code>,
+                  no extra SDK dependency
+                </td>
+              </tr>
+              <tr>
+                <td>Custom <code>VectorStore</code></td>
+                <td>
+                  Three methods
+                  (<code>upsert</code>/<code>query</code>/<code>delete</code>) —
+                  same shape as <code>SessionStore</code> — for pgvector,
+                  Qdrant, Weaviate, etc.
+                </td>
+              </tr>
+              <tr>
+                <td><code>openaiEmbeddings()</code></td>
+                <td>
+                  Default <code>EmbeddingProvider</code>, via the OpenAI
+                  embeddings endpoint
+                </td>
+              </tr>
+            </table>
+          </div>
+          <p class="dim">
+            <code>createRetrievalTool()</code> accepts <code>topK</code> and a
+            metadata <code>filter</code> (e.g.
+            <code>{ tenantId: "acme" }</code>) to scope retrieval — both apply
+            on every call the model makes to the tool.
+          </p>
+        </section>
+
+        <section id="structured-output">
+          <h2>
+            <span class="eyebrow">13 · CORE CONCEPTS</span>Structured output
+            &amp; streaming
+          </h2>
+          <h3><span class="h3-dot">›</span>generateObject()</h3>
+          <p>
+            Guarantees a typed, schema-validated object — not hopeful JSON
+            parsing. If the model's output fails validation, it's automatically
+            retried with a repair prompt describing exactly what was wrong, up
+            to <code>maxRepairAttempts</code> times (default 2).
+          </p>
+          <pre><code>import { z } from "zod";
+import { generateObject } from "samai-sdk";
+
+const ReviewSchema = z.object({
+  summary: z.string(),
+  sentiment: z.enum(["positive", "negative", "mixed"]),
+  score: z.number().min(1).max(5),
+});
+
+const result = await generateObject(client, {
+  model: "claude-sonnet-4-6",
+  schema: ReviewSchema,
+  messages: [{ role: "user", content: "Extract structured data from this review: ..." }],
+});
+
+result.object.sentiment; // fully typed: "positive" | "negative" | "mixed"
+result.attempts;         // how many tries it took
+</code></pre>
+          <p>
+            If it never succeeds, it throws
+            <code>GenerateObjectError</code> with <code>.attempts</code> and
+            <code>.lastError</code> for logging or graceful fallback.
+          </p>
+
+          <h3><span class="h3-dot">›</span>streamObject()</h3>
+          <p>
+            Same guarantee, but streamed —
+            <code>partialObjectStream</code> yields progressively-more-complete
+            objects as the model writes them, for rendering a form, card, or
+            dashboard field-by-field.
+          </p>
+          <pre><code>const { partialObjectStream, object, usage } = streamObject(client, {
+  model: "claude-sonnet-4-6",
+  schema: RecipeSchema,
+  messages: [{ role: "user", content: "Give me a simple chana masala recipe." }],
+});
+
+for await (const partial of partialObjectStream) {
+  render(partial); // DeepPartial&lt;Recipe&gt; — bind straight to UI state
+}
+
+const recipe = await object; // fully typed, schema-validated
+</code></pre>
+          <div class="callout">
+            Unlike <code>generateObject()</code>,
+            <code>streamObject()</code> doesn't auto-repair — once partial
+            output has reached the UI, silently restarting would duplicate or
+            contradict what the user already saw. If the final accumulated
+            output fails validation, the <code>object</code> promise rejects
+            with <code>GenerateObjectError</code>.
+          </div>
+
+          <h3><span class="h3-dot">›</span>Raw streaming</h3>
+          <pre><code>for await (const chunk of client.stream({ model: "gpt-4o-mini", messages: [...] })) {
+  if (chunk.type === "text-delta") process.stdout.write(chunk.textDelta);
+}</code></pre>
+        </section>
+
+        <section id="batch-output">
+          <h2>
+            <span class="eyebrow">14 · CORE CONCEPTS</span>Batch output &amp;
+            Standard Schema
+          </h2>
+          <h3><span class="h3-dot">›</span>generateObjectBatch()</h3>
+          <p>
+            Runs <code>generateObject()</code> across many inputs with bounded
+            concurrency — the shape of a data-extraction pipeline. One bad input
+            never aborts the rest of the batch; results come back in the same
+            order as <code>items</code> regardless of completion order.
+          </p>
+          <pre><code>import { z } from "zod";
+import { createClient, anthropic, generateObjectBatch } from "samai-sdk";
+
+const client = createClient({ provider: anthropic({ apiKey: "..." }) });
+const TicketSchema = z.object({
+  category: z.enum(["billing", "bug", "feature_request", "other"]),
+  urgency: z.enum(["low", "medium", "high"]),
+});
+
+const batch = await generateObjectBatch(client, {
+  items: ["My card was charged twice", "App crashes on launch"],
+  buildOptions: (ticketText) => ({
+    model: "claude-sonnet-4-6",
+    schema: TicketSchema,
+    messages: [{ role: "user", content: `Classify: "${ticketText}"` }],
+  }),
+  concurrency: 5, // default 5
+  onItemSettled: (item) => console.log(`item ${item.index}: ${item.status}`),
+});
+
+console.log(`${batch.succeeded}/${batch.results.length} succeeded`, batch.usage);
+for (const r of batch.results) {
+  if (r.status === "fulfilled") console.log(r.item, "->", r.result.object);
+  else console.warn(r.item, "failed:", r.error.message);
+}</code></pre>
+          <p class="dim">
+            Pass <code>throwOnAnyFailure: true</code> to throw a
+            <code>GenerateObjectBatchError</code> (carrying the full
+            <code>batchResult</code>, including successful items) once every
+            item has settled if any failed. For a concurrency cap shared across
+            unrelated calls too, wrap the provider in
+            <a href="#concurrency"><code>withConcurrencyLimit()</code></a>
+            instead — the two compose.
+          </p>
+
+          <h3>
+            <span class="h3-dot">›</span>Standard Schema support (valibot, and
+            others)
+          </h3>
+          <p>
+            Anywhere the SDK takes a schema — <code>generateObject()</code>,
+            <code>streamObject()</code>, <code>createSchemaGuardrail()</code>,
+            <code>Agent.outputSchema</code> — you can pass a zod schema, or any
+            <a href="https://standardschema.dev" target="_blank" rel="noopener"
+              >Standard Schema V1</a
+            >
+            validator (valibot 0.31+/1.x, arktype, etc.) instead. zod behavior
+            is unchanged; this is purely additive.
+          </p>
+          <pre><code>import * as v from "valibot";
+import { createClient, anthropic, generateObject } from "samai-sdk";
+
+const ReviewSchema = v.object({
+  summary: v.string(),
+  score: v.pipe(v.number(), v.minValue(1), v.maxValue(10)),
+});
+
+const result = await generateObject(client, {
+  model: "claude-sonnet-4-6",
+  schema: ReviewSchema, // a valibot schema — works exactly the same way as zod
+  messages: [{ role: "user", content: "Extract structured data from this review: ..." }],
+});
+
+result.object.score; // fully typed via valibot's own inference</code></pre>
+          <p class="dim">
+            Validation needs no extra dependency. Generating the model-facing
+            JSON-Schema instruction currently supports zod and valibot
+            specifically — valibot needs the optional
+            <code>@valibot/to-json-schema</code> peer dependency. Other Standard
+            Schema vendors work for validation but need you to describe the
+            output shape yourself via <code>system</code>.
+          </p>
+          <div class="callout warn">
+            <strong>Known limitation.</strong> This currently reaches
+            <code>generateObject()</code
+            >/<code>streamObject()</code>/<code>createSchemaGuardrail()</code>/<code
+              >Agent.outputSchema</code
+            >
+            only. Tool <code>parameters</code> across the 8 provider adapters
+            still require a zod schema specifically.
+          </div>
+        </section>
+
+        <section id="tracing">
+          <h2><span class="eyebrow">15 · CORE CONCEPTS</span>Tracing</h2>
+          <p>
+            Every run produces a <code>RunTrace</code> (also available as
+            <code>result.trace</code>): a <code>runId</code>, the full
+            <code>agentPath</code>, a timestamped event log, and
+            <code>totalUsage</code> summed across every model call. If the
+            provider passed to <code>createClient()</code> was wrapped with
+            <code>withRetry()</code
+            >/<code>withFallback()</code>/<code>withTimeout()</code>, every
+            retry, fallback, and timeout that happens during the run is captured
+            automatically — no extra wiring needed.
+          </p>
+          <div class="trace-panel">
+            <div class="trace-head">
+              <span>RunTrace · run_8f21ac</span
+              ><span>agentPath: [trip_router → packing_specialist]</span>
+            </div>
+            <div class="trace-body">
+              <div class="trace-row">
+                <span class="trace-t">+0ms</span
+                ><span class="trace-tag tag-run">run-started</span
+                ><span>trip_router</span>
+              </div>
+              <div class="trace-row">
+                <span class="trace-t">+180ms</span
+                ><span class="trace-tag tag-guard">retry</span
+                ><span>attempt 1 after 200ms — 503 Service Unavailable</span>
+              </div>
+              <div class="trace-row">
+                <span class="trace-t">+412ms</span
+                ><span class="trace-tag tag-tool">tool-call</span
+                ><span>get_weather({ city: "Tokyo" })</span>
+              </div>
+              <div class="trace-row">
+                <span class="trace-t">+588ms</span
+                ><span class="trace-tag tag-ok">tool-result</span
+                ><span>18C and cloudy in Tokyo</span>
+              </div>
+              <div class="trace-row">
+                <span class="trace-t">+901ms</span
+                ><span class="trace-tag tag-hand">handoff</span
+                ><span>trip_router → packing_specialist</span>
+              </div>
+              <div class="trace-row">
+                <span class="trace-t">+1240ms</span
+                ><span class="trace-tag tag-guard">guardrail-triggered</span
+                ><span>output · schema mismatch, retrying</span>
+              </div>
+              <div class="trace-row">
+                <span class="trace-t">+1810ms</span
+                ><span class="trace-tag tag-run">run-completed</span
+                ><span>totalUsage: 68 tokens</span>
+              </div>
+            </div>
+          </div>
+          <p class="dim">
+            Illustrative shape of a trace — actual field names below.
+          </p>
+          <pre><code>console.log(result.trace.runId);       // e.g. "8f21ac.."
+console.log(result.trace.agentPath);   // ["trip_router", "packing_specialist"]
+console.log(result.trace.events);      // model-call, tool-call, tool-result, handoff,
+                                        // retry, fallback, timeout,
+                                        // guardrail-triggered, approval-requested/resolved,
+                                        // run-completed / run-failed — each timestamped
+console.log(result.trace.totalUsage);  // { inputTokens, outputTokens, totalTokens }
+
+for (const event of result.trace.events) {
+  if (event.type === "retry")    console.log(`retry #${event.attempt}: ${event.error}`);
+  if (event.type === "fallback") console.log(`${event.failedProvider} -> ${event.nextProvider}`);
+  if (event.type === "timeout")  console.log(`${event.model} timed out after ${event.timeoutMs}ms`);
+}</code></pre>
+          <p>
+            The same events stream live from <code>runAgentStream()</code> as
+            <code>retry-attempted</code> / <code>fallback-triggered</code> /
+            <code>timeout-occurred</code> <code>AgentEvent</code>s, so a UI can
+            surface "retrying…" without waiting for the run to finish. See
+            <code>examples/resilience-tracing-mock-test.ts</code> for this
+            exercised end-to-end against the real resilience wrappers.
+          </p>
+          <p>
+            Useful for debugging, cost tracking, and building your own
+            observability layer — pipe <code>trace.events</code> straight into
+            your logger or a tracing backend.
+          </p>
+        </section>
+
+        <section id="reliability">
+          <h2>
+            <span class="eyebrow">16 · CORE CONCEPTS</span>Reliability &amp;
+            timeouts
+          </h2>
+          <h3><span class="h3-dot">›</span>Retries and fallback chains</h3>
+          <pre><code>import { withRetry, withFallback, createResilientProvider, anthropic, openai } from "samai-sdk";
+
+// Retries only, one provider
+const retrying = withRetry(anthropic({ apiKey: "..." }), { maxRetries: 3 });
+
+// Fallback only — tries Claude, then GPT if Claude errors
+const chain = withFallback([anthropic({ apiKey: "..." }), openai({ apiKey: "..." })]);
+
+// Both combined, each provider retried before falling through to the next
+const resilient = createResilientProvider(
+  [anthropic({ apiKey: "..." }), openai({ apiKey: "..." })],
+  { retry: { maxRetries: 2, initialDelayMs: 500 } }
+);</code></pre>
+          <p class="dim">
+            Streaming note: retries/fallback only apply before the first chunk
+            reaches the caller — a mid-stream failure surfaces as-is rather than
+            duplicating or dropping output already seen.
+          </p>
+
+          <h3><span class="h3-dot">›</span>Timeouts</h3>
+          <p>
+            <code>withTimeout()</code> enforces a real deadline via
+            <code>AbortController</code> — not error-message sniffing:
+          </p>
+          <pre><code>import { withTimeout, withRetry, anthropic } from "samai-sdk";
+
+const provider = withRetry(
+  withTimeout(anthropic({ apiKey: "..." }), { timeoutMs: 15_000 }),
+  { maxRetries: 2 }
+);</code></pre>
+          <p>
+            <code>createResilientProvider()</code> applies a 30s default timeout
+            automatically (override with
+            <code>{ timeout: { timeoutMs } }</code>, disable with
+            <code>{ timeout: false }</code>). <code>TimeoutError</code> is
+            retryable by default.
+          </p>
+          <p>
+            Tool execution has its own independent deadline — every
+            <code>execute()</code> call is raced against a timeout (default 30s,
+            set per-tool via <code>timeoutMs</code>, or per-run via
+            <code>runAgent(client, agent, input, { defaultToolTimeoutMs })</code
+            >). A hung tool returns as an <code>isError</code> result instead of
+            hanging the run.
+          </p>
+
+          <h3>
+            <span class="h3-dot">›</span>Loop prevention &amp; safe secrets
+          </h3>
+          <ul style="color: var(--text-dim); padding-left: 20px">
+            <li>
+              Per-agent <code>maxTurns</code> plus a hard absolute turn cap
+              (50), both raising <code>MaxTurnsExceededError</code>
+            </li>
+            <li>
+              <code>HandoffLoopError</code> for revisited agents, plus a hard
+              <code>maxHandoffs</code> cap
+            </li>
+            <li>
+              API keys are only ever read from constructor options / env vars,
+              never logged, and never appear in trace events
+            </li>
+          </ul>
+        </section>
+
+        <section id="concurrency">
+          <h2>
+            <span class="eyebrow">17 · CORE CONCEPTS</span>Concurrency &amp;
+            rate limiting
+          </h2>
+          <p>
+            Two provider wrappers, same shape as
+            <code>withRetry</code>/<code>withFallback</code>/<code
+              >withTimeout</code
+            >
+            — compose all of them freely. Both queue calls beyond the limit
+            rather than rejecting.
+          </p>
+          <pre><code>import { withConcurrencyLimit, withRateLimit, withRetry, anthropic } from "samai-sdk";
+
+// Caps in-flight calls — a queue, not a rejection.
+const capped = withConcurrencyLimit(anthropic({ apiKey: "..." }), { maxConcurrent: 5 });
+
+// Caps requests per time window — a token-bucket limiter, refills continuously.
+const throttled = withRateLimit(anthropic({ apiKey: "..." }), { maxRequests: 60, intervalMs: 60_000 });
+
+// Compose with retries — wrapping the limit AROUND retry means retries of the same call
+// count against the limit too (usually what you want).
+const provider = withConcurrencyLimit(withRetry(anthropic({ apiKey: "..." }), { maxRetries: 2 }), { maxConcurrent: 5 });</code></pre>
+          <p class="dim">
+            Use <code>withConcurrencyLimit()</code> to stay under a provider's
+            hard concurrent-request cap when running many agents (or a
+            <a href="#batch-output"><code>generateObjectBatch()</code></a
+            >) at once. Use <code>withRateLimit()</code> to stay under a
+            published requests-per-minute limit before it turns into 429s that
+            <code>withRetry</code> then has to spend time recovering from.
+          </p>
+        </section>
+
+        <section id="resumable-runs">
+          <h2><span class="eyebrow">18 · CORE CONCEPTS</span>Resumable runs</h2>
+          <p>
+            <code>resumeAgentStream()</code>/<code>resumeAgent()</code> pick a
+            run back up after a crash, an uncaught error, or a process restart —
+            instead of starting over from the original input. A
+            <code>RunCheckpoint</code> is saved after every completed turn
+            (model call + any tool execution or handoff).
+          </p>
+          <pre><code>import {
+  createClient, anthropic, defineAgent, runAgent, resumeAgent, FileCheckpointStore,
+} from "samai-sdk";
+
+const client = createClient({ provider: anthropic({ apiKey: "..." }) });
+const agent = defineAgent({ name: "worker", instructions: "...", model: "claude-sonnet-4-6", tools: [...] });
+
+const checkpointStore = new FileCheckpointStore("./checkpoints"); // survives a real process restart
+const runId = "run-" + Date.now();
+
+try {
+  await runAgent(client, agent, "Do a multi-step task", { checkpoint: { store: checkpointStore, runId } });
+} catch (err) {
+  // Resume with the SAME root agent — its handoffs tree is walked by name to find
+  // whichever agent was active when the checkpoint was saved.
+  const result = await resumeAgent(client, agent, { checkpoint: { store: checkpointStore, runId } });
+  console.log(result.output);
+}</code></pre>
+          <p>
+            Already-executed tool calls are never re-run on resume — the
+            checkpoint carries the full message history, so the resumed run's
+            first action is a fresh model call continuing the conversation, not
+            a repeat of completed work. The checkpoint is deleted automatically
+            on successful completion; it's left in place on failure so you can
+            inspect or resume past it.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <tr>
+                <th>Store</th>
+                <th>Notes</th>
+              </tr>
+              <tr>
+                <td><code>InMemoryCheckpointStore</code></td>
+                <td>
+                  Only survives within the same process — good for resuming
+                  after a caught error mid-request
+                </td>
+              </tr>
+              <tr>
+                <td><code>FileCheckpointStore(dir)</code></td>
+                <td>
+                  One JSON file per run — survives a real process restart/crash
+                </td>
+              </tr>
+            </table>
+          </div>
+          <p class="dim">
+            Agent <em>definitions</em> (instructions, tools, code) aren't part
+            of a checkpoint — only the run's accumulated state is. Resuming a
+            <code>runId</code> with no saved checkpoint throws
+            <code>CheckpointNotFoundError</code> rather than silently starting
+            fresh. See <code>examples/checkpoint-resume-mock-test.ts</code>,
+            which simulates a genuine mid-run crash and proves no tool call gets
+            re-executed on resume.
+          </p>
+        </section>
+
+        <section id="error-handling">
+          <h2><span class="eyebrow">19 · CORE CONCEPTS</span>Error handling</h2>
+          <div class="table-wrap">
+            <table>
+              <tr>
+                <th>Error</th>
+                <th>Thrown when</th>
+              </tr>
+              <tr>
+                <td><code>AgentRunError</code></td>
+                <td>
+                  Wraps any error from a run; carries <code>.cause</code> and
+                  <code>.trace</code>
+                </td>
+              </tr>
+              <tr>
+                <td><code>MaxTurnsExceededError</code></td>
+                <td>An agent (or the absolute cap) exceeds its turn limit</td>
+              </tr>
+              <tr>
+                <td><code>HandoffLoopError</code></td>
+                <td>
+                  A handoff would revisit an already-visited agent, or exceed
+                  <code>maxHandoffs</code>
+                </td>
+              </tr>
+              <tr>
+                <td><code>GuardrailBlockedError</code></td>
+                <td>
+                  An input/output guardrail returns <code>allowed: false</code>
+                </td>
+              </tr>
+              <tr>
+                <td><code>GenerateObjectError</code></td>
+                <td>
+                  <code>generateObject()</code>/<code>streamObject()</code>
+                  output never passes schema validation
+                </td>
+              </tr>
+              <tr>
+                <td><code>TimeoutError</code></td>
+                <td>
+                  A provider call exceeds its
+                  <code>withTimeout()</code> deadline
+                </td>
+              </tr>
+              <tr>
+                <td><code>ToolTimeoutError</code></td>
+                <td>
+                  A tool's <code>execute()</code> exceeds its timeout (surfaced
+                  as an isError tool result, not thrown)
+                </td>
+              </tr>
+              <tr>
+                <td><code>AllProvidersFailedError</code></td>
+                <td>
+                  Every provider in a <code>withFallback()</code> chain fails
+                </td>
+              </tr>
+              <tr>
+                <td><code>CheckpointNotFoundError</code></td>
+                <td>
+                  <code>resumeAgentStream()</code> is given a
+                  <code>runId</code> with no saved checkpoint, or one
+                  referencing an unreachable agent
+                </td>
+              </tr>
+              <tr>
+                <td><code>GenerateObjectBatchError</code></td>
+                <td>
+                  <code>generateObjectBatch({ throwOnAnyFailure: true })</code>
+                  and at least one item failed; carries the full
+                  <code>batchResult</code> on <code>.batchResult</code>
+                </td>
+              </tr>
+            </table>
+          </div>
+          <pre><code>try {
+  await runAgent(client, agent, input);
+} catch (err) {
+  if (err instanceof AgentRunError) {
+    console.error(err.cause);        // the underlying typed error
+    console.error(err.trace.events); // trace up to the point of failure
+  }
+}</code></pre>
+        </section>
+
+        <section id="observability">
+          <h2>
+            <span class="eyebrow">20 · OPS &amp; TESTING</span>OpenTelemetry
+            &amp; trace viewer
+          </h2>
+          <p>
+            Every run already produces a
+            <a href="#tracing"><code>RunTrace</code></a> — these two features
+            turn that data into something you can look at or pipe into existing
+            infra.
+          </p>
+          <h3><span class="h3-dot">›</span>exportRunTraceToOtel()</h3>
+          <p>
+            Converts a <code>RunTrace</code> into real OpenTelemetry spans on
+            whatever tracer your app has already configured. Model calls and
+            tool calls become duration spans (paired from the trace's start/end
+            events, so they carry real timing); handoffs, retries, fallbacks,
+            timeouts, guardrail trips, and approvals become short child spans —
+            all correctly parented under one root span per run.
+          </p>
+          <pre><code>import { runAgent, exportRunTraceToOtel } from "samai-sdk";
+
+const result = await runAgent(client, agent, "hi");
+await exportRunTraceToOtel(result.trace); // needs the optional @opentelemetry/api peer dependency
+
+// Now visible wherever your traces already go — Honeycomb, Datadog, Grafana Tempo, or
+// anything else that speaks OTLP, using whatever exporter/provider you've already set up.</code></pre>
+          <h3>
+            <span class="h3-dot">›</span>renderTraceHTML() + samai-sdk trace
+          </h3>
+          <p>
+            Renders a <code>RunTrace</code> as a self-contained,
+            offline-viewable HTML timeline — no server, no build step,
+            color-coded events proportionally positioned by real elapsed time,
+            filterable by type, raw JSON available inline.
+          </p>
+          <pre><code>import { writeFileSync } from "node:fs";
+import { runAgent, renderTraceHTML } from "samai-sdk";
+
+const result = await runAgent(client, agent, "hi");
+writeFileSync("trace.html", renderTraceHTML(result.trace)); // open directly in a browser</code></pre>
+          <pre><code>npx samai-sdk trace ./trace.json --port 4949
+# ✅ Trace viewer running at http://localhost:4949</code></pre>
+          <p class="dim">
+            See <code>examples/otel-export-mock-test.ts</code> (verified against
+            the real <code>@opentelemetry/sdk-trace-base</code> in-memory
+            exporter — actual span names, attributes, parent/child nesting, and
+            status codes) and
+            <code>examples/trace-viewer-mock-test.ts</code> (starts the real CLI
+            server and fetches from it).
+          </p>
+        </section>
+
+        <section id="usage-ledger">
+          <h2>
+            <span class="eyebrow">21 · OPS &amp; TESTING</span>Usage tracking
+          </h2>
+          <p>
+            <code>createBudgetGuardrail()</code> (see
+            <a href="#guardrails">Guardrails</a>) answers "has
+            <em>this client</em> exceeded its budget" with one running total.
+            <code>createUsageLedger()</code> answers "how much has
+            <em>each session/user</em> cost so far" — cumulative tokens and
+            estimated cost, broken down per key and per model.
+          </p>
+          <pre><code>import { createClient, anthropic, createUsageLedger } from "samai-sdk";
+
+const ledger = createUsageLedger();
+const provider = ledger.wrapProvider(
+  anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }),
+  (options) => options.metadata?.sessionId as string | undefined
+);
+const client = createClient({ provider });
+
+await client.generate({
+  model: "claude-sonnet-4-6",
+  messages: [{ role: "user", content: "hi" }],
+  metadata: { sessionId: "session-123" },
+});
+
+console.log(ledger.getStats("session-123"));
+// { totalTokens, totalCostUsd, callCount, byModel: { "claude-sonnet-4-6": { ... } } }
+console.log(ledger.getAllStats()); // every key seen so far
+console.log(ledger.toJSON());      // JSON snapshot — feed this to a dashboard or log periodically</code></pre>
+          <p class="dim">
+            Calls where <code>keyFn</code> returns <code>undefined</code> are
+            recorded under <code>"_unattributed"</code> rather than silently
+            dropped. Pass <code>{ onRecord }</code> to fire on every recorded
+            call, and <code>{ pricing }</code> to override the built-in
+            per-model pricing table — provider pricing changes over time, so
+            treat the defaults as illustrative. The ledger tracks numbers;
+            rendering a dashboard from <code>toJSON()</code> is on you.
+          </p>
+        </section>
+
+        <section id="testing">
+          <h2>
+            <span class="eyebrow">22 · OPS &amp; TESTING</span>Testing your
+            agents
+          </h2>
+          <p>
+            <code>createMockProvider()</code> ships in the SDK so you don't have
+            to hand-roll a fake <code>Provider</code> for your own tests.
+          </p>
+          <pre><code>import { createClient, defineAgent, runAgent, createMockProvider } from "samai-sdk";
+
+const mock = createMockProvider({
+  responses: [
+    { toolCalls: [{ toolName: "get_weather", args: { city: "Tokyo" } }] },
+    { text: "It's 18°C and cloudy in Tokyo." },
+  ],
+});
+
+const client = createClient({ provider: mock });
+const result = await runAgent(client, myAgent, "What's the weather in Tokyo?");
+
+// every GenerateOptions this provider was called with, in order:
+console.log(mock.calls.length); // 2
+console.log(result.output);     // "It's 18°C and cloudy in Tokyo."
+
+mock.reset(); // clears the call log so the same mock instance can be reused across test cases</code></pre>
+          <p class="dim">
+            Each entry in <code>responses</code> can set <code>text</code>,
+            <code>toolCalls</code>, <code>finishReason</code>,
+            <code>usage</code>, <code>delayMs</code> (simulate latency), or
+            <code>error</code> (simulate a provider failure). Pass a function
+            instead of an array if a turn's response needs to depend on what the
+            agent loop actually sent.
+          </p>
+        </section>
+
+        <section id="deployment">
+          <h2><span class="eyebrow">23 · OPS &amp; TESTING</span>Deployment</h2>
+          <p>
+            Provider/store compatibility across Node servers, Node serverless,
+            and edge runtimes (Vercel Edge, Cloudflare Workers), a custom-<code
+              >SessionStore</code
+            >
+            recipe for edge-only persistence, and runnable Vercel Edge /
+            Cloudflare Worker examples are covered in
+            <a
+              href="https://github.com/Sameer9823/samai-sdk/blob/master/docs/deployment.md"
+              target="_blank"
+              rel="noopener"
+              ><code>docs/deployment.md</code></a
+            >
+            in the repository.
+          </p>
+          <div class="callout warn">
+            <strong>Native-dependency stores don't run at the edge.</strong>
+            <code>SqliteSessionStore</code> (native
+            <code>better-sqlite3</code> binding) and
+            <code>FileCheckpointStore</code>/<code>FileSessionStore</code>
+            (filesystem access) only work in Node runtimes.
+            <code>RedisSessionStore</code> works anywhere that can reach your
+            Redis instance over the network, including most edge runtimes.
+          </div>
+        </section>
+
+        <section id="providers">
+          <h2><span class="eyebrow">24 · REFERENCE</span>Model providers</h2>
+          <p>
+            The agent runtime and client only depend on the
+            <code>Provider</code> interface (<code>generate()</code> +
+            <code>stream()</code>), so adding a new one is a matter of
+            implementing that interface against a new API — no changes needed
+            anywhere else in the SDK. Every provider below implements it, so
+            swapping one in only ever changes one line.
+          </p>
+          <pre><code>import { openai, anthropic, google, groq, mistral, ollama, azureOpenAI, bedrock } from "samai-sdk";
+
+createClient({ provider: groq({ apiKey: "..." }) });    // fast inference (LPU hardware)
+createClient({ provider: ollama() });                    // local models, no key, no cost
+createClient({ provider: bedrock({ region: "us-east-1" }) }); // unified Converse API</code></pre>
+          <div class="table-wrap">
+            <table>
+              <tr>
+                <th>Provider</th>
+                <th>Import</th>
+                <th>Peer dependency</th>
+                <th>API key env var</th>
+              </tr>
+              <tr>
+                <td>Anthropic (Claude)</td>
+                <td><code>anthropic()</code></td>
+                <td><code>@anthropic-ai/sdk</code></td>
+                <td>pass explicitly</td>
+              </tr>
+              <tr>
+                <td>OpenAI</td>
+                <td><code>openai()</code></td>
+                <td><code>openai</code></td>
+                <td>pass explicitly</td>
+              </tr>
+              <tr>
+                <td>Google (Gemini)</td>
+                <td><code>google()</code></td>
+                <td><code>@google/generative-ai</code></td>
+                <td>pass explicitly</td>
+              </tr>
+              <tr>
+                <td>Groq</td>
+                <td><code>groq()</code></td>
+                <td><code>openai</code></td>
+                <td><code>GROQ_API_KEY</code></td>
+              </tr>
+              <tr>
+                <td>Mistral</td>
+                <td><code>mistral()</code></td>
+                <td><code>openai</code></td>
+                <td><code>MISTRAL_API_KEY</code></td>
+              </tr>
+              <tr>
+                <td>Ollama (local)</td>
+                <td><code>ollama()</code></td>
+                <td><code>openai</code></td>
+                <td>none — local, no auth</td>
+              </tr>
+              <tr>
+                <td>Azure OpenAI</td>
+                <td><code>azureOpenAI()</code></td>
+                <td><code>openai</code></td>
+                <td><code>AZURE_OPENAI_API_KEY</code></td>
+              </tr>
+              <tr>
+                <td>AWS Bedrock</td>
+                <td><code>bedrock()</code></td>
+                <td><code>@aws-sdk/client-bedrock-runtime</code></td>
+                <td>standard AWS credential chain</td>
+              </tr>
+            </table>
+          </div>
+          <p class="dim">
+            <code>groq()</code>, <code>mistral()</code>, <code>ollama()</code>,
+            and <code>azureOpenAI()</code> all reuse the <code>openai</code> SDK
+            client pointed at a different <code>baseURL</code> — every
+            OpenAI-compatible provider shares one implementation
+            (<code>buildOpenAIStyleProvider()</code>), so there's nothing
+            provider-specific to go wrong per integration.
+            <code>azureOpenAI()</code> routes by deployment name, so
+            <code>model</code> = your deployment name, not a model name.
+            <code>bedrock()</code> uses the unified Converse API, so the same
+            <code>model</code> param works across Bedrock-hosted Claude, Llama,
+            Titan, etc.
+          </p>
+        </section>
+
+        <section id="prompt-caching">
+          <h2><span class="eyebrow">25 · REFERENCE</span>Prompt caching</h2>
+          <p>
+            Set <code>promptCaching: true</code> on a call to mark the system
+            prompt and tool definitions as a reusable, cacheable prefix — useful
+            in an agent loop where the same system prompt and tools get re-sent
+            on every turn.
+          </p>
+          <pre><code>const result = await client.generate({
+  model: "claude-sonnet-4-6",
+  system: longStaticSystemPrompt,
+  messages,
+  tools,
+  promptCaching: true,
+});
+
+console.log(result.usage.cacheReadTokens);  // tokens served from cache — billed at a fraction of input price
+console.log(result.usage.cacheWriteTokens); // tokens written to the cache on this call</code></pre>
+          <p class="dim">
+            Currently honored by <code>anthropic()</code> — it adds Anthropic's
+            <code>cache_control</code> breakpoints to the system prompt and the
+            last tool definition (which caches the entire tool list as one
+            unit). It's a no-op on providers that don't need client-side cache
+            configuration — OpenAI and Groq cache automatically server-side
+            above a token threshold with nothing to set.
+          </p>
+        </section>
+
+        <section id="api-reference">
+          <h2><span class="eyebrow">26 · REFERENCE</span>API reference</h2>
+          <div class="table-wrap">
+            <table>
+              <tr>
+                <th>Export</th>
+                <th>Purpose</th>
+              </tr>
+              <tr>
+                <td><code>createClient(opts)</code></td>
+                <td>Wraps a provider with input/output guardrail middleware</td>
+              </tr>
+              <tr>
+                <td><code>defineTool(tool)</code></td>
+                <td>Type-checked tool definition helper</td>
+              </tr>
+              <tr>
+                <td><code>defineAgent(config)</code></td>
+                <td>
+                  Bundles instructions/model/tools/handoffs/guardrails/schema
+                </td>
+              </tr>
+              <tr>
+                <td><code>runAgent(client, agent, input, opts?)</code></td>
+                <td>
+                  Runs an agent to completion, returns <code>RunResult</code>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>runAgentStream(client, agent, input, opts?)</code>
+                </td>
+                <td>Same, but yields <code>AgentEvent</code>s as it goes</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>resumeAgent</code> / <code>resumeAgentStream</code>
+                </td>
+                <td>
+                  Resume a run from a <code>RunCheckpoint</code> after a crash —
+                  see <a href="#resumable-runs">Resumable runs</a>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>InMemoryCheckpointStore</code> /
+                  <code>FileCheckpointStore</code>
+                </td>
+                <td>
+                  Built-in <code>RunCheckpointStore</code> implementations
+                </td>
+              </tr>
+              <tr>
+                <td><code>generateObject(client, opts)</code></td>
+                <td>Typed, schema-validated output with auto-repair</td>
+              </tr>
+              <tr>
+                <td><code>streamObject(client, opts)</code></td>
+                <td>Streamed typed output, no auto-repair</td>
+              </tr>
+              <tr>
+                <td><code>generateObjectBatch(client, opts)</code></td>
+                <td>
+                  Bounded-concurrency <code>generateObject()</code> across many
+                  inputs — see <a href="#batch-output">Batch output</a>
+                </td>
+              </tr>
+              <tr>
+                <td><code>createSession(id, store)</code></td>
+                <td>Persistent cross-run conversation memory</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>InMemorySessionStore</code> /
+                  <code>FileSessionStore</code>
+                </td>
+                <td>
+                  Built-in <code>SessionStore</code> implementations (no extra
+                  infra)
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>RedisSessionStore</code> /
+                  <code>SqliteSessionStore</code>
+                </td>
+                <td>
+                  Built-in <code>SessionStore</code> implementations backed by
+                  Redis / SQLite (optional peer deps <code>ioredis</code> /
+                  <code>better-sqlite3</code>)
+                </td>
+              </tr>
+              <tr>
+                <td><code>createWebSearchTool(opts?)</code></td>
+                <td>Real Tavily/Brave-backed <code>web_search</code> tool</td>
+              </tr>
+              <tr>
+                <td><code>createMCPClient(opts)</code></td>
+                <td>
+                  Connects to an MCP server (stdio/HTTP/SSE), returns its tools
+                  as <code>ToolDefinition[]</code> via <code>.tools()</code> —
+                  see <a href="#mcp">MCP</a>
+                </td>
+              </tr>
+              <tr>
+                <td><code>createSandbox(opts?)</code></td>
+                <td>
+                  Isolated temp directory + real code execution/file I/O — see
+                  <a href="#sandbox">Sandboxed code execution</a>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>createCodeExecutionTool(opts?)</code> /
+                  <code>createSandboxTools(sandbox?)</code>
+                </td>
+                <td>
+                  Wrap a <code>Sandbox</code> as agent tools — the latter
+                  bundles
+                  <code>execute_code</code
+                  >/<code>write_file</code>/<code>read_file</code>/<code
+                    >list_files</code
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>generateSpeech(opts)</code> /
+                  <code>transcribeAudio(opts)</code>
+                </td>
+                <td>
+                  OpenAI TTS/Whisper REST wrappers — see
+                  <a href="#voice">Voice / realtime agents</a>
+                </td>
+              </tr>
+              <tr>
+                <td><code>createRealtimeSession(opts?)</code></td>
+                <td>
+                  WebSocket session against OpenAI's Realtime API — streamed
+                  audio/text, interruption, tool-call execution
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>InMemoryVectorStore</code> /
+                  <code>PineconeVectorStore</code>
+                </td>
+                <td>
+                  Built-in <code>VectorStore</code> implementations — see
+                  <a href="#rag">RAG</a>
+                </td>
+              </tr>
+              <tr>
+                <td><code>openaiEmbeddings()</code></td>
+                <td>Default <code>EmbeddingProvider</code></td>
+              </tr>
+              <tr>
+                <td>
+                  <code>createRetrievalTool(opts)</code> /
+                  <code>embedChunks()</code>
+                </td>
+                <td>Wires embeddings + a vector store into a RAG tool</td>
+              </tr>
+              <tr>
+                <td><code>createDangerousToolGuardrail(opts?)</code></td>
+                <td>Built-in tool guardrail for common destructive patterns</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>createPiiInputGuardrail</code> /
+                  <code>createPiiOutputGuardrail</code>
+                </td>
+                <td>Detect/redact PII</td>
+              </tr>
+              <tr>
+                <td><code>createPromptInjectionGuardrail(opts?)</code></td>
+                <td>Heuristic jailbreak detection</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>createBlocklistInputGuardrail</code> /
+                  <code>createBlocklistOutputGuardrail</code>
+                </td>
+                <td>Keyword/regex filtering</td>
+              </tr>
+              <tr>
+                <td><code>createSchemaGuardrail(schema)</code></td>
+                <td>
+                  Validates output as JSON against a zod OR Standard Schema
+                  schema
+                </td>
+              </tr>
+              <tr>
+                <td><code>createBudgetGuardrail(opts)</code></td>
+                <td>Caps cumulative token/cost spend for one client</td>
+              </tr>
+              <tr>
+                <td><code>createUsageLedger(opts?)</code></td>
+                <td>
+                  Per-key (session/user) cumulative cost &amp; token tracking —
+                  see <a href="#usage-ledger">Usage tracking</a>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>withRetry</code> / <code>withFallback</code> /
+                  <code>withTimeout</code> /
+                  <code>createResilientProvider</code>
+                </td>
+                <td>
+                  Provider-level resilience wrappers —
+                  retries/fallbacks/timeouts show up automatically in
+                  <code>RunTrace</code>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>withConcurrencyLimit</code> / <code>withRateLimit</code>
+                </td>
+                <td>
+                  Queue-based in-flight / requests-per-window caps — see
+                  <a href="#concurrency">Concurrency &amp; rate limiting</a>
+                </td>
+              </tr>
+              <tr>
+                <td><code>createMockProvider(opts)</code></td>
+                <td>
+                  Scripted <code>Provider</code> for testing agents without a
+                  real model API — see <a href="#testing">Testing</a>
+                </td>
+              </tr>
+              <tr>
+                <td><code>exportRunTraceToOtel(trace, opts?)</code></td>
+                <td>
+                  Converts a <code>RunTrace</code> into real OpenTelemetry spans
+                </td>
+              </tr>
+              <tr>
+                <td><code>renderTraceHTML(trace, opts?)</code></td>
+                <td>
+                  Renders a <code>RunTrace</code> as a self-contained offline
+                  HTML timeline
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>anthropic()</code> / <code>openai()</code> /
+                  <code>google()</code> / <code>groq()</code> /
+                  <code>mistral()</code> / <code>ollama()</code> /
+                  <code>azureOpenAI()</code> / <code>bedrock()</code>
+                </td>
+                <td>
+                  Provider adapters — see
+                  <a href="#providers">Model providers</a>
+                </td>
+              </tr>
+              <tr>
+                <td><code>useAgent(client, agent)</code></td>
+                <td>
+                  Framework hook wrapping <code>runAgentStream()</code> — import
+                  from <code>"samai-sdk/react"</code>,
+                  <code>"samai-sdk/vue"</code>, or
+                  <code>"samai-sdk/svelte"</code>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>AnySchema</code> / <code>StandardSchemaV1</code>
+                  <span class="dim">(types)</span>
+                </td>
+                <td>
+                  The types accepted anywhere a schema is — zod or Standard
+                  Schema V1 (valibot, etc.); validation itself happens
+                  automatically inside
+                  <code>generateObject()</code
+                  >/<code>streamObject()</code>/<code>createSchemaGuardrail()</code>,
+                  not via a separately exported function
+                </td>
+              </tr>
+            </table>
+          </div>
+          <p class="dim">
+            Full type signatures ship with the package
+            (<code>dist/index.d.ts</code>) — every export above is fully typed,
+            so your editor's autocomplete and hover docs cover anything not
+            shown here.
+          </p>
+        </section>
+
+        <section id="react">
+          <h2><span class="eyebrow">27 · REFERENCE</span>React</h2>
+          <p>
+            The <code>samai-sdk/react</code> subpath exports
+            <code>useAgent(client, agent)</code>: a thin hook wrapping
+            <code>runAgentStream()</code>. It owns no agent-loop logic of its
+            own, so behavior matches calling
+            <code>runAgentStream()</code> directly from Node — it just gives you
+            React state to render.
+          </p>
+          <pre><code>import { createClient, anthropic, defineAgent } from "samai-sdk";
+import { useAgent } from "samai-sdk/react";
+
+const client = createClient({ provider: anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) });
+const supportAgent = defineAgent({ name: "support_agent", instructions: "...", model: "claude-sonnet-4-6" });
+
+function SupportChat() {
+  const { run, isRunning, text, events, result, error } = useAgent(client, supportAgent);
+
+  return (
+    &lt;div&gt;
+      &lt;button onClick={() =&gt; run("How do I add a handoff?")} disabled={isRunning}&gt;Ask&lt;/button&gt;
+      &lt;p&gt;{text}&lt;/p&gt; {/* streams in live as text-delta events arrive */}
+      {error &amp;&amp; &lt;p&gt;Error: {error.message}&lt;/p&gt;}
+      {result &amp;&amp; &lt;p&gt;Done — final agent: {result.finalAgent}&lt;/p&gt;}
+    &lt;/div&gt;
+  );
+}</code></pre>
+          <div class="table-wrap">
+            <table>
+              <tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Notes</th>
+              </tr>
+              <tr>
+                <td><code>run(input, opts?)</code></td>
+                <td>
+                  <code
+                    >(string, RunAgentOptions?) =&gt;
+                    Promise&lt;RunResult&gt;</code
+                  >
+                </td>
+                <td>
+                  Starts a run; safe to call again once the previous one
+                  finishes
+                </td>
+              </tr>
+              <tr>
+                <td><code>isRunning</code></td>
+                <td><code>boolean</code></td>
+                <td>True while a run is in progress</td>
+              </tr>
+              <tr>
+                <td><code>text</code></td>
+                <td><code>string</code></td>
+                <td>Accumulates live from <code>text-delta</code> events</td>
+              </tr>
+              <tr>
+                <td><code>events</code></td>
+                <td><code>AgentEvent[]</code></td>
+                <td>
+                  Full ordered event log — tool calls, handoffs,
+                  retries/fallbacks/timeouts, guardrail trips
+                </td>
+              </tr>
+              <tr>
+                <td><code>result</code> / <code>error</code></td>
+                <td>
+                  <code>RunResult | null</code> / <code>Error | null</code>
+                </td>
+                <td>Populated once the run finishes</td>
+              </tr>
+              <tr>
+                <td><code>reset()</code></td>
+                <td><code>() =&gt; void</code></td>
+                <td>Resets state back to idle</td>
+              </tr>
+            </table>
+          </div>
+          <p class="dim">
+            <code>react</code> is an optional peer dependency — nothing else in
+            the SDK requires it. See <code>examples/react-usage.tsx</code> for
+            the full version.
+          </p>
+        </section>
+
+        <section id="vue">
+          <h2><span class="eyebrow">28 · REFERENCE</span>Vue</h2>
+          <p>
+            The <code>samai-sdk/vue</code> subpath exports the same
+            <code>useAgent(client, agent)</code> shape for the Vue 3 Composition
+            API — Vue refs instead of React state, identical underlying
+            behavior.
+          </p>
+          <pre><code>&lt;script setup&gt;
+import { createClient, anthropic, defineAgent } from "samai-sdk";
+import { useAgent } from "samai-sdk/vue";
+
+const client = createClient({ provider: anthropic({ apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY }) });
+const supportAgent = defineAgent({ name: "support_agent", instructions: "...", model: "claude-sonnet-4-6" });
+
+const { run, isRunning, text, events, result, error } = useAgent(client, supportAgent);
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;button @click="run('How do I add a handoff?')" :disabled="isRunning"&gt;Ask&lt;/button&gt;
+  &lt;p&gt;{{ text }}&lt;/p&gt;
+  &lt;p v-if="error"&gt;Error: {{ error.message }}&lt;/p&gt;
+  &lt;p v-if="result"&gt;Done — final agent: {{ result.finalAgent }}&lt;/p&gt;
+&lt;/template&gt;</code></pre>
+          <p class="dim">
+            <code>isRunning</code>/<code>text</code>/<code>events</code> are
+            plain <code>Ref</code>s (reactive, template-bindable directly);
+            <code>result</code>/<code>error</code> are <code>ShallowRef</code>s.
+            <code>vue</code> is an optional peer dependency. See
+            <code>examples/vue-usage-mock-test.ts</code>, which exercises this
+            against real Vue <code>watch()</code> reactivity.
+          </p>
+        </section>
+
+        <section id="svelte">
+          <h2><span class="eyebrow">29 · REFERENCE</span>Svelte</h2>
+          <p>
+            The <code>samai-sdk/svelte</code> subpath exports
+            <code>useAgent(client, agent)</code> as a Svelte store — subscribe
+            with <code>$agent</code> in a <code>.svelte</code> file.
+          </p>
+          <pre><code>&lt;script&gt;
+  import { createClient, anthropic, defineAgent } from "samai-sdk";
+  import { useAgent } from "samai-sdk/svelte";
+
+  const client = createClient({ provider: anthropic({ apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY }) });
+  const supportAgent = defineAgent({ name: "support_agent", instructions: "...", model: "claude-sonnet-4-6" });
+
+  const agent = useAgent(client, supportAgent);
+&lt;/script&gt;
+
+&lt;button on:click={() =&gt; agent.run("How do I add a handoff?")} disabled={$agent.isRunning}&gt;Ask&lt;/button&gt;
+&lt;p&gt;{$agent.text}&lt;/p&gt;
+{#if $agent.error}&lt;p&gt;Error: {$agent.error.message}&lt;/p&gt;{/if}
+{#if $agent.result}&lt;p&gt;Done — final agent: {$agent.result.finalAgent}&lt;/p&gt;{/if}</code></pre>
+          <p class="dim">
+            <code>agent.run()</code>/<code>agent.reset()</code> are called
+            directly on the store object; every other field comes through the
+            <code>$agent</code> subscription. <code>svelte</code> is an optional
+            peer dependency. See
+            <code>examples/svelte-usage-mock-test.ts</code>, which exercises
+            this against a real store subscription.
+          </p>
+          <p class="dim">
+            All three framework hooks
+            (<code>react</code>/<code>vue</code>/<code>svelte</code>) are thin
+            wrappers around <code>runAgentStream()</code> — none of them own any
+            agent-loop logic themselves.
+          </p>
+        </section>
+
+        <section id="examples">
+          <h2><span class="eyebrow">30 · REFERENCE</span>Examples</h2>
+          <div class="grid-2">
+            <div class="card">
+              <h4>examples/basic.ts</h4>
+              <p>
+                Minimal <code>createClient()</code> + tool call round-trip
+                against a real provider.
+              </p>
+            </div>
+            <div class="card">
+              <h4>examples/agent-handoff.ts</h4>
+              <p>
+                Two agents, a real provider, one handing off packing advice to
+                the other.
+              </p>
+            </div>
+            <div class="card">
+              <h4>examples/agent-runtime-mock-test.ts</h4>
+              <p>
+                Tool calls, handoffs, loop prevention, and session persistence —
+                no API key needed.
+              </p>
+            </div>
+            <div class="card">
+              <h4>examples/agent-structured-output-mock-test.ts</h4>
+              <p>
+                <code>generateObject()</code> validate + repair loop — no API
+                key needed.
+              </p>
+            </div>
+            <div class="card">
+              <h4>examples/reliability-mock-test.ts</h4>
+              <p>
+                <code>withTimeout()</code>, tool guardrails, and the full
+                approval workflow — no API key needed.
+              </p>
+            </div>
+            <div class="card">
+              <h4>examples/resilience-tracing-mock-test.ts</h4>
+              <p>
+                Retries, fallbacks, and timeouts exercised against real
+                wrappers, asserted visible in <code>RunTrace</code> — no API key
+                needed.
+              </p>
+            </div>
+            <div class="card">
+              <h4>examples/session-stores-mock-test.ts</h4>
+              <p>
+                <code>SqliteSessionStore</code> against a real on-disk database,
+                plus <code>RedisSessionStore</code> logic — no API key needed.
+              </p>
+            </div>
+            <div class="card">
+              <h4>examples/provider-conversion-mock-test.ts</h4>
+              <p>
+                Bedrock/Anthropic message + prompt-caching conversion logic — no
+                API key needed.
+              </p>
+            </div>
+            <div class="card">
+              <h4>examples/rag-mock-test.ts</h4>
+              <p>
+                Vector store + retrieval tool, embed → search → return, end to
+                end — no API key needed.
+              </p>
+            </div>
+            <div class="card">
+              <h4>examples/cli-mock-test.ts</h4>
+              <p>
+                Runs the real built CLI binary, typechecks the scaffolded
+                output.
+              </p>
+            </div>
+            <div class="card">
+              <h4>examples/checkpoint-resume-mock-test.ts</h4>
+              <p>
+                Genuine simulated crash mid-run + resume, proves no tool call is
+                re-executed.
+              </p>
+            </div>
+            <div class="card">
+              <h4>examples/testing-utils-mock-test.ts</h4>
+              <p>
+                <code>createMockProvider()</code>,
+                <code>withConcurrencyLimit()</code>,
+                <code>withRateLimit()</code> — real timing assertions.
+              </p>
+            </div>
+            <div class="card">
+              <h4>examples/otel-export-mock-test.ts</h4>
+              <p>
+                <code>exportRunTraceToOtel()</code> against the real
+                <code>@opentelemetry/sdk-trace-base</code> in-memory exporter.
+              </p>
+            </div>
+            <div class="card">
+              <h4>examples/trace-viewer-mock-test.ts</h4>
+              <p>
+                <code>renderTraceHTML()</code> content + the real CLI
+                <code>trace</code> server, fetched over HTTP.
+              </p>
+            </div>
+            <div class="card">
+              <h4>examples/generate-object.ts</h4>
+              <p>
+                <code>generateObject()</code> against a real provider with a zod
+                schema.
+              </p>
+            </div>
+            <div class="card">
+              <h4>examples/stream-object.ts</h4>
+              <p>
+                <code>streamObject()</code> driving a progressively-filled UI
+                card.
+              </p>
+            </div>
+            <div class="card">
+              <h4>examples/react-usage.tsx</h4>
+              <p>
+                <code>useAgent()</code> driving a chat component end to end.
+              </p>
+            </div>
+            <div class="card">
+              <h4>examples/vue-usage-mock-test.ts</h4>
+              <p>Vue <code>useAgent()</code> against real Vue reactivity.</p>
+            </div>
+            <div class="card">
+              <h4>examples/svelte-usage-mock-test.ts</h4>
+              <p>
+                Svelte <code>useAgent()</code> against a real store
+                subscription.
+              </p>
+            </div>
+          </div>
+          <pre><code>npm run example:basic
+npm run example:agent-handoff                    # needs ANTHROPIC_API_KEY
+npm run example:agent-runtime-mock-test          # no API key needed
+npm run example:reliability-mock-test            # no API key needed
+npm run example:resilience-tracing-mock-test     # no API key needed
+npm run example:session-stores-mock-test         # no API key needed
+npm run example:checkpoint-resume-mock-test      # no API key needed
+npm run example:otel-export-mock-test            # no API key needed
+npm test                                         # runs all 16 mock-test suites together</code></pre>
+          <div class="footer-nav">
+            <span class="dim">SamAI SDK · samai-sdk · MIT licensed</span>
+            <a href="https://github.com/Sameer9823/samai-sdk"
+              >GitHub repository →</a
+            >
+          </div>
+        </section>
+      </main>
+
+      <aside class="toc" id="tocRail">
+        <div class="toc-label">On this page</div>
+        <div class="toc-list" id="tocList">
+          <span class="toc-empty">—</span>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Prism.js: used only for tokenizing code into <span class="token ..."> elements.
+     All visual styling comes from this page's own theme variables above, not a Prism theme. -->
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"
+      defer
+    ></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"
+      defer
+    ></script>
+
+    <script>
+      const links = Array.from(document.querySelectorAll(".nav-link"));
+      const sectionEls = links.map((l) =>
+        document.querySelector(l.getAttribute("href")),
+      );
+
+      // ---------- Right rail: on-this-page (h3s of the active section) ----------
+      const tocList = document.getElementById("tocList");
+      let currentSectionIdx = -1;
+
+      function slugify(text) {
+        return text
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/(^-|-$)/g, "");
+      }
+
+      // Give every h3 inside a section a stable id (based on its own text) once.
+      document.querySelectorAll("main section").forEach((sec) => {
+        sec.querySelectorAll("h3").forEach((h3) => {
+          const label = h3.textContent.replace(/^›/, "").trim();
+          if (!h3.id) h3.id = sec.id + "__" + slugify(label);
+        });
+      });
+
+      function renderTocFor(sectionIdx) {
+        if (sectionIdx === currentSectionIdx) {
+          updateTocActive();
+          return;
+        }
+        currentSectionIdx = sectionIdx;
+        const sec = sectionEls[sectionIdx];
+        tocList.innerHTML = "";
+        if (!sec) {
+          tocList.innerHTML = '<span class="toc-empty">—</span>';
+          return;
+        }
+        const h3s = Array.from(sec.querySelectorAll("h3"));
+        if (h3s.length === 0) {
+          const h2 = sec.querySelector("h2");
+          const a = document.createElement("a");
+          a.className = "toc-item active";
+          a.href = "#" + sec.id;
+          a.textContent = h2
+            ? h2.textContent.replace(/^[\dA-Z· ]+/, "").trim() || h2.textContent
+            : sec.id;
+          tocList.appendChild(a);
+          return;
+        }
+        h3s.forEach((h3) => {
+          const a = document.createElement("a");
+          a.className = "toc-item";
+          a.href = "#" + h3.id;
+          a.textContent = h3.textContent.replace(/^›/, "").trim();
+          a.dataset.target = h3.id;
+          tocList.appendChild(a);
+        });
+        updateTocActive();
+      }
+
+      function updateTocActive() {
+        const y = window.scrollY + 140;
+        const items = Array.from(
+          tocList.querySelectorAll(".toc-item[data-target]"),
+        );
+        if (items.length === 0) return;
+        let activeIdx = 0;
+        items.forEach((item, i) => {
+          const target = document.getElementById(item.dataset.target);
+          if (target && target.offsetTop <= y) activeIdx = i;
+        });
+        items.forEach((item, i) =>
+          item.classList.toggle("active", i === activeIdx),
+        );
+      }
+
+      // ---------- Scroll-spy for left nav + right rail ----------
+      const setActive = () => {
+        let idx = 0;
+        const y = window.scrollY + 120;
+        sectionEls.forEach((s, i) => {
+          if (s && s.offsetTop <= y) idx = i;
+        });
+        links.forEach((l, i) => l.classList.toggle("active", i === idx));
+        renderTocFor(idx);
+      };
+      document.addEventListener("scroll", setActive, { passive: true });
+      setActive();
+
+      // ---------- Theme toggle (light / dark) ----------
+      (function () {
+        if (window.__themeToggleInit) return; // guard: never wire this up twice
+        window.__themeToggleInit = true;
+        const root = document.documentElement;
+        let saved = null;
+        try {
+          saved = localStorage.getItem("theme");
+        } catch (e) {
+          /* storage unavailable — fall back to system preference each load */
+        }
+        const systemLight =
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: light)").matches;
+        const initial = saved || (systemLight ? "light" : "dark");
+        if (initial === "light") root.setAttribute("data-theme", "light");
+
+        function setTheme(theme) {
+          if (theme === "light") root.setAttribute("data-theme", "light");
+          else root.removeAttribute("data-theme");
+          try {
+            localStorage.setItem("theme", theme);
+          } catch (e) {
+            /* ignore — theme just won't persist across reloads */
+          }
+        }
+
+        function toggleTheme(e) {
+          if (e) e.preventDefault(); // stop any ghost/duplicate synthetic click on touch
+          const isLight = root.getAttribute("data-theme") === "light";
+          setTheme(isLight ? "dark" : "light");
+        }
+
+        const sb = document.getElementById("themeToggleSidebar");
+        const mb = document.getElementById("themeToggleMobile");
+        // onclick assignment overwrites rather than stacks, so even if this
+        // script block ever runs more than once, each button only ever has
+        // one active handler — no double-toggle "blink" on tap.
+        if (sb) sb.onclick = toggleTheme;
+        if (mb) mb.onclick = toggleTheme;
+      })();
+
+      // ---------- Mobile sidebar open/close ----------
+      const sidebar = document.getElementById("sidebar");
+      const backdrop = document.getElementById("sidebarBackdrop");
+      const openSidebar = () => {
+        sidebar.classList.add("open");
+        backdrop.classList.add("open");
+      };
+      const closeSidebar = () => {
+        sidebar.classList.remove("open");
+        backdrop.classList.remove("open");
+      };
+      document.getElementById("menuToggle").addEventListener("click", () => {
+        sidebar.classList.contains("open") ? closeSidebar() : openSidebar();
+      });
+      backdrop.addEventListener("click", closeSidebar);
+      links.forEach((l) => l.addEventListener("click", closeSidebar));
+
+      // ---------- Wrap tables so wide ones scroll horizontally (already wrapped inline above,
+      //            this only catches any left un-wrapped) ----------
+      document.querySelectorAll("main table").forEach((table) => {
+        if (table.closest(".table-wrap")) return;
+        const wrap = document.createElement("div");
+        wrap.className = "table-wrap";
+        table.parentNode.insertBefore(wrap, table);
+        wrap.appendChild(table);
+      });
+
+      // ---------- Package-manager tabs (install section) ----------
+      const pmTabs = document.querySelectorAll("#pmTabs .pm-tab");
+      const pmPanes = document.querySelectorAll("#pmPanes .pm-pane");
+      pmTabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          const pm = tab.dataset.pm;
+          pmTabs.forEach((t) => t.classList.toggle("active", t === tab));
+          pmPanes.forEach((p) =>
+            p.classList.toggle("active", p.dataset.pm === pm),
+          );
+        });
+      });
+
+      // ---------- Code blocks: language label + copy button + syntax highlighting ----------
+      const copyIcon =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+      const checkIcon =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+      function detectLang(text) {
+        const t = text.trim();
+        if (/^(npm|npx|node|git|export|cd|docker|curl|pnpm|yarn)\b/m.test(t))
+          return "bash";
+        if (/<\/?[a-zA-Z]/.test(t) && /return\s*\(/.test(t)) return "tsx";
+        if (/^\s*</.test(t) && t.includes("</")) return "markup";
+        return "typescript";
+      }
+
+      // Handle the special pre-built install code block (with pm tabs) separately:
+      // just wire up copy + syntax highlight classes, skip the generic wrapper.
+      document.querySelectorAll(".pm-pane code").forEach((codeEl) => {
+        codeEl.classList.add("language-bash");
+      });
+      const installCopyBtn = document.querySelector(
+        ".code-block .copy-btn[data-copy-target]",
+      );
+      if (installCopyBtn) {
+        installCopyBtn.addEventListener("click", async () => {
+          const activePane = document.querySelector(
+            "#pmPanes .pm-pane.active code",
+          );
+          try {
+            await navigator.clipboard.writeText(activePane.textContent);
+            installCopyBtn.innerHTML = checkIcon + "<span>Copied</span>";
+            installCopyBtn.classList.add("copied");
+            setTimeout(() => {
+              installCopyBtn.innerHTML = copyIcon + "<span>Copy</span>";
+              installCopyBtn.classList.remove("copied");
+            }, 1800);
+          } catch (e) {
+            installCopyBtn.innerHTML = copyIcon + "<span>Copy failed</span>";
+            setTimeout(() => {
+              installCopyBtn.innerHTML = copyIcon + "<span>Copy</span>";
+            }, 1800);
+          }
+        });
+      }
+
+      // Generic code blocks (everything else): wrap with header, dots, lang label, copy button.
+      document.querySelectorAll("main pre").forEach((pre) => {
+        if (pre.closest(".code-block")) return;
+        if (pre.closest(".pm-panes")) return;
+        const codeEl = pre.querySelector("code") || pre;
+        const lang =
+          pre.getAttribute("data-lang") || detectLang(codeEl.textContent);
+        const prismLang =
+          lang === "bash"
+            ? "bash"
+            : lang === "tsx"
+              ? "tsx"
+              : lang === "markup"
+                ? "markup"
+                : "typescript";
+        codeEl.classList.add("language-" + prismLang);
+
+        const block = document.createElement("div");
+        block.className = "code-block";
+
+        const head = document.createElement("div");
+        head.className = "code-block-head";
+
+        const left = document.createElement("div");
+        left.className = "code-block-head-left";
+
+        const dots = document.createElement("span");
+        dots.className = "dots";
+        dots.innerHTML =
+          '<span class="d1"></span><span class="d2"></span><span class="d3"></span>';
+
+        const label = document.createElement("span");
+        label.className = "code-lang";
+        label.textContent =
+          lang === "tsx"
+            ? "tsx"
+            : lang === "bash"
+              ? "shell"
+              : lang === "markup"
+                ? "html"
+                : "ts";
+
+        left.appendChild(dots);
+        left.appendChild(label);
+
+        const btn = document.createElement("button");
+        btn.className = "copy-btn";
+        btn.innerHTML = copyIcon + "<span>Copy</span>";
+        btn.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(codeEl.textContent);
+            btn.innerHTML = checkIcon + "<span>Copied</span>";
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.innerHTML = copyIcon + "<span>Copy</span>";
+              btn.classList.remove("copied");
+            }, 1800);
+          } catch (e) {
+            btn.innerHTML = copyIcon + "<span>Copy failed</span>";
+            setTimeout(() => {
+              btn.innerHTML = copyIcon + "<span>Copy</span>";
+            }, 1800);
+          }
+        });
+
+        head.appendChild(left);
+        head.appendChild(btn);
+        pre.parentNode.insertBefore(block, pre);
+        block.appendChild(head);
+        block.appendChild(pre);
+      });
+
+      window.addEventListener("load", () => {
+        if (window.Prism && Prism.highlightAll) Prism.highlightAll();
+      });
+    </script>
+  </body>
+</html>
