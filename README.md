@@ -6,6 +6,84 @@
 
 `samai-sdk` — a unified AI agent SDK covering **OpenAI**, **Anthropic (Claude)**, and **Google Gemini** — one API, swappable providers, with a real agent runtime, guardrails, tool calling, MCP (Model Context Protocol) client support, web search, and Redis/SQLite-backed sessions built in as first-class citizens instead of bolted on.
 
+```bash
+npx samai-sdk create my-agent --provider anthropic && cd my-agent && npm install
+```
+
+## Table of contents
+
+- [Why this exists](#why-this-exists)
+- [How it compares](#how-it-compares)
+- [Status](#status) · [Architecture](#architecture)
+- [Roadmap](#roadmap)
+- [Feature reference](#feature-reference) — jump straight to any API
+- [Agents: defineAgent(), handoffs, sessions, tracing](#agents-defineagent-handoffs-sessions-and-tracing)
+- [Documentation](#documentation) · [Install](#install) · [Quick start](#quick-start) · [Providers](#providers)
+- [Web search](#web-search) · [MCP](#mcp-model-context-protocol) · [Sandboxed code execution](#sandboxed-code-execution) · [Voice / realtime](#voice--realtime-agents) · [RAG](#rag--vector-search)
+- [Guardrails](#guardrails) · [Structured output](#structured-output-with-generateobject) · [Retries/fallback/timeouts](#retries-and-fallback-chains)
+- [Testing](#testing-your-agents) · [Observability](#observability-tracing-opentelemetry-and-a-local-trace-viewer) · [Error handling](#error-handling)
+- [Project layout](#project-layout) · [CLI](#cli) · [Publishing](#publishing-to-npm)
+
+## Why developers choose samai-sdk
+
+Five reasons teams pick `samai-sdk` over the alternative of hand-rolling an agent loop, or adopting a heavier framework:
+
+**1. You're not betting on one model vendor.** Eight providers behind one `Provider` interface — Anthropic, OpenAI, Gemini, Groq, Mistral, Ollama, Azure OpenAI, Bedrock. Swap `anthropic({...})` for `openai({...})` and nothing else in your agent, tools, guardrails, or tracing changes. If your vendor changes pricing, rate-limits you, or ships a worse model, switching is a one-line change — not a rewrite.
+
+**2. Safety is the default, not a checkbox you forget.** Approval-gated tools **fail closed** if you forget to wire up a handler — a risky tool literally cannot run unattended by accident. Guardrails throw typed errors with the reason attached instead of silently degrading. Every run produces a full trace whether you asked for it or not. Most teams bolt this on after an incident; here it's already on.
+
+**3. It's small enough to actually read.** The entire runtime is under 2,500 lines of TypeScript. When something behaves unexpectedly at 2am, reading `run.ts` is a 10-minute task — not an afternoon spent spelunking through a framework's abstraction layers. That's a real velocity difference for a team that has to *own* what's in production.
+
+**4. It has the features other "minimal" SDKs make you build yourself.** MCP client, sandboxed code execution, voice/realtime sessions, resumable/checkpointed runs, multi-agent handoffs with loop prevention, four session store backends, OpenTelemetry export, a local trace viewer — these are usually the reasons teams graduate to a heavyweight framework. Here they come with the "thin" SDK.
+
+**5. No lock-in, ever, by construction.** The agent runtime is written against `generate()`/`stream()` and never imports a vendor SDK directly. There's no proprietary state format, no hosted-only tracing, no platform you have to deploy through. Everything — sessions, checkpoints, traces — is data you own, in stores you control (file, Redis, SQLite, or your own).
+
+### Head-to-head: what you get without extra work
+
+| If you need this in production... | Hand-rolled loop | Thin provider wrapper (Vercel AI SDK) | Heavy framework (LangChain.js) | `samai-sdk` |
+|---|---|---|---|---|
+| Swap model providers without a rewrite | Rebuild the loop | Change one import, usually | Change an integration package | Change one line |
+| Stop a risky tool call without a human present | You build this | You build this | You build this | Built in, fails closed |
+| See exactly what an agent run did, after the fact | You build this | Partial via telemetry hooks | External service (LangSmith) | Built in, every run, no signup |
+| Delegate a task to a specialist agent safely | You build loop-prevention yourself | You build this | Graph setup required | One `handoffs: [...]` array |
+| Resume a run after a crash without redoing tool calls | You build this | You build this | Available via LangGraph persistence | Built in, two functions |
+| Read the whole thing in an afternoon | N/A — you wrote it | Maybe, if you stay in scope | Unlikely | Yes — under 2,500 lines |
+
+## Feature reference
+
+A fast lookup table — find the function you need, see what it does and where to read more, without scrolling the whole README.
+
+| Need | Function / export | One-liner | Docs |
+|---|---|---|---|
+| Call any model provider | `createClient()` | Wraps a `Provider` with input/output guardrail middleware | [Providers](#providers) |
+| Swap providers | `openai()` `anthropic()` `google()` `groq()` `mistral()` `ollama()` `azureOpenAI()` `bedrock()` | Same `Provider` interface across all eight | [Providers](#providers) |
+| Define a tool | `defineTool()` | Name + zod/Standard Schema params + `execute()` | [Quick start](#quick-start) |
+| Build an agent | `defineAgent()` | Bundles instructions, model, tools, handoffs, guardrails, output schema | [Agents](#agents-defineagent-handoffs-sessions-and-tracing) |
+| Run an agent | `runAgent()` / `runAgentStream()` | Full agent loop with tool execution, handoffs, tracing | [Agents](#agents-defineagent-handoffs-sessions-and-tracing) |
+| Delegate between agents | `handoffs` on `defineAgent()` | Loop-safe multi-agent delegation (`maxHandoffs` cap) | [Handoffs](#handoffs-and-loop-prevention) |
+| Persist conversation memory | `createSession()` + `*SessionStore` | In-memory, file, Redis, or SQLite backing stores | [Sessions](#sessions-memory) |
+| Block/rewrite input or output | `createPiiInputGuardrail()` etc. | PII, prompt-injection, blocklist, schema, budget guardrails | [Guardrails](#guardrails) |
+| Block a dangerous tool call | `createDangerousToolGuardrail()` | Runs before tool execution, blocks by name/args | [Tool guardrails](#tool-guardrails-and-approval) |
+| Require human sign-off | `requiresApproval` + `onApprovalRequest` | Fails closed if no approval handler is wired up | [Approval](#tool-guardrails-and-approval) |
+| Get typed JSON out | `generateObject()` / `streamObject()` | Schema-validated output with auto-repair retries | [Structured output](#structured-output-with-generateobject) |
+| Classify/extract at scale | `generateObjectBatch()` | Bounded-concurrency batch runs, per-item failure isolation | [Batch](#batch-structured-output-with-generateobjectbatch) |
+| Give the model live web results | `createWebSearchTool()` | Real Tavily/Brave-backed `web_search` tool | [Web search](#web-search) |
+| Connect an MCP server | `createMCPClient()` | stdio / HTTP / SSE transports, tools exposed as `ToolDefinition[]` | [MCP](#mcp-model-context-protocol) |
+| Let the model run code | `createSandbox()` / `createSandboxTools()` | Isolated temp dir, real `node`/`python3`/`bash` child processes | [Sandbox](#sandboxed-code-execution) |
+| Add RAG | `createRetrievalTool()` + `InMemoryVectorStore` / `PineconeVectorStore` | Embed → search → return, wired into one tool | [RAG](#rag--vector-search) |
+| Voice / realtime | `generateSpeech()` `transcribeAudio()` `createRealtimeSession()` | TTS/STT REST calls + a WebSocket realtime session | [Voice](#voice--realtime-agents) |
+| Survive transient failures | `withRetry()` `withFallback()` `createResilientProvider()` | Backoff-with-jitter retries, provider fallback chains | [Retries](#retries-and-fallback-chains) |
+| Enforce a real deadline | `withTimeout()` | `AbortController`-based, not error-message pattern matching | [Timeouts](#timeouts) |
+| Cap concurrency / rate | `withConcurrencyLimit()` `withRateLimit()` | Queueing wrappers, composable with retry/fallback | [Concurrency](#concurrency-and-rate-limiting) |
+| Resume after a crash | `resumeAgent()` / `resumeAgentStream()` | Picks up from the last completed-turn checkpoint | [Resumable runs](#resumable-runs-checkpointresume) |
+| Test without a real API key | `createMockProvider()` | Scripted responses + call log | [Testing](#testing-your-agents) |
+| Track cost per user/session | `createUsageLedger()` | Per-key, per-model token/cost breakdown | [Usage tracking](#usage-tracking-with-createusageledger) |
+| Export traces to your APM | `exportRunTraceToOtel()` | Real OpenTelemetry spans, correctly parented | [Observability](#observability-tracing-opentelemetry-and-a-local-trace-viewer) |
+| View a trace locally | `renderTraceHTML()` / `samai-sdk trace` | Offline HTML timeline, or a local HTTP server | [Observability](#observability-tracing-opentelemetry-and-a-local-trace-viewer) |
+| Cache a static system prompt | `promptCaching: true` | Anthropic `cache_control` breakpoints, surfaced in `Usage` | [Prompt caching](#prompt-caching) |
+| Use it from a UI framework | `useAgent()` via `samai-sdk/react` `/vue` `/svelte` | Same shape, framework-native reactivity | [React](#using-it-from-react) [Vue](#using-it-from-vue) [Svelte](#using-it-from-svelte) |
+| Scaffold a new project | `npx samai-sdk create <dir>` | Runnable starter, wired to your chosen provider | [CLI](#cli) |
+
 ## Why this exists
 
 **Who it's for.** TypeScript/Node developers building agent features — support bots, internal ops assistants, multi-step research tools — who want the core agent primitives (tool loop, handoffs, guardrails, memory, tracing) without adopting a large framework's opinions about state management, deployment, or vendor lock-in.
@@ -17,6 +95,69 @@
 **How it differs from existing SDKs.** Most agent frameworks pick a lane: either they're a thin provider wrapper with no orchestration (you still build the loop yourself), or they're a full framework with their own state/deployment model that only really shines on one vendor's models. `samai-sdk` is deliberately in between — a real agent runtime (loop, handoffs, guardrails, sessions, tracing) that stays provider-agnostic by construction, because the runtime is written against `generate()`/`stream()` and never imports a vendor SDK directly.
 
 **Why adopt it.** If you're already committed to one vendor's agent framework and it's working, there's no reason to switch. But if you want the orchestration without the lock-in — or you've been burned by a framework changing its API faster than your production code can keep up — this gives you the same primitives on a much smaller, auditable surface.
+
+## How it compares
+
+A qualitative snapshot against the frameworks people usually consider alongside this one. All of these projects move fast, so treat this as directional — check each project's own docs for the current state before making a decision.
+
+| | `samai-sdk` | LangChain.js | Vercel AI SDK | OpenAI Agents SDK | Mastra |
+|---|---|---|---|---|---|
+| Provider model | 8 adapters, one `Provider` interface | Many, via separate integration packages | Many, via separate `@ai-sdk/*` packages | OpenAI-first; others via a compatible-endpoint shim | Multiple, via its own model layer |
+| Agent runtime (loop, not just calls) | ✅ built in | ✅ (LangGraph) | Partial — you compose it | ✅ built in | ✅ built in |
+| Multi-agent handoffs | ✅ with loop prevention + `maxHandoffs` | ✅ (graph-based, more setup) | ❌ (manual) | ✅ | ✅ |
+| Guardrails as a first-class concept | ✅ PII/injection/blocklist/schema/budget, typed errors | Via custom chains | ❌ (manual) | Partial (basic) | Partial |
+| Approval / human-in-the-loop | ✅ fails closed by default | Via custom graph nodes | ❌ (manual) | Partial | Partial |
+| Built-in tracing | ✅ `RunTrace` on every run, no opt-in | Via LangSmith (external service) | Via provider/telemetry integrations | Via platform dashboard | ✅ built in |
+| OpenTelemetry export | ✅ `exportRunTraceToOtel()` | Via LangSmith exporters | Via Vercel/OTel integrations | Via platform | ✅ |
+| MCP client support | ✅ stdio/HTTP/SSE | Emerging | Emerging | ✅ | ✅ |
+| Sandboxed code execution tool | ✅ process-isolated | ❌ (bring your own) | ❌ (bring your own) | ❌ (bring your own) | Partial |
+| Resumable/checkpointed runs | ✅ file or in-memory checkpoint store | ✅ (LangGraph persistence) | ❌ (manual) | Partial | Partial |
+| Framework hooks | React, Vue, Svelte — same shape | React (via LangGraph) | React, Vue, Svelte, Solid | Varies | React |
+| Runtime source size | < 2,500 lines, no framework lock-in | Large, many packages | Large, many packages | Moderate, OpenAI-coupled | Moderate |
+| Vendor lock-in | None by construction (`generate()`/`stream()` only) | Low | Low-moderate | High (OpenAI-centric) | Low |
+
+The short version: `samai-sdk` trades LangChain's breadth (integrations, community chains) and Vercel AI SDK's frontend-streaming polish for a smaller, single-purpose surface that gives you the agent-loop/guardrails/tracing primitives every serious agent needs, without pulling in a framework's opinions about everything else.
+
+## Architecture
+
+How a single `runAgent()` call actually flows — the tool loop, guardrails, handoffs, and tracing all happen inside this one call.
+
+<!-- The diagram below renders on GitHub natively (Mermaid support). -->
+
+```mermaid
+flowchart TD
+    A["runAgent() / runAgentStream()"] --> B["Input guardrails\n(PII, prompt-injection, blocklist, budget)"]
+    B -- blocked --> B1["GuardrailBlockedError"]
+    B -- allowed --> C["Model call via Provider\n(generate / stream)"]
+    C --> D{"Model response"}
+    D -- "text only" --> E["Output guardrails"]
+    D -- "tool call(s)" --> F["Tool guardrails\n(block by name / args)"]
+    F -- blocked --> F1["Tool call rejected"]
+    F -- allowed --> G{"requiresApproval?"}
+    G -- "yes, no handler" --> G1["Fails closed"]
+    G -- "yes, handler wired" --> H["onApprovalRequest()"]
+    G -- no --> I["execute() with timeout"]
+    H -- approved --> I
+    H -- rejected --> H1["Tool call rejected"]
+    I --> J["Tool result appended to messages"]
+    J --> C
+    D -- "handoff_to__&lt;agent&gt;" --> K{"Already visited?"}
+    K -- yes --> K1["HandoffLoopError"]
+    K -- no --> L["Switch active agent,\ncarry full history forward"]
+    L --> C
+    E -- blocked --> E1["GuardrailBlockedError"]
+    E -- allowed --> M["RunResult\n+ RunTrace (every call/tool/handoff/retry logged)"]
+
+    style B1 fill:#3a1f1f,stroke:#e06c75
+    style F1 fill:#3a1f1f,stroke:#e06c75
+    style G1 fill:#3a1f1f,stroke:#e06c75
+    style H1 fill:#3a1f1f,stroke:#e06c75
+    style K1 fill:#3a1f1f,stroke:#e06c75
+    style E1 fill:#3a1f1f,stroke:#e06c75
+    style M fill:#1f3a24,stroke:#98c379
+```
+
+Every retry, fallback, and timeout applied at the `Provider` level (via `withRetry()`/`withFallback()`/`withTimeout()`/`createResilientProvider()`) wraps the "Model call via Provider" box transparently — the agent loop doesn't need to know about them, but every occurrence still lands in `RunTrace.events` and streams as an `AgentEvent`. See [Tracing](#tracing) for what gets recorded.
 
 ## Status
 
@@ -1199,12 +1340,6 @@ npm run example:valibot-mock-test              # Standard Schema (valibot) suppo
 npm test                                       # runs all mock-test examples together (16 suites)
 ```
 
-## Publishing to npm
 
-```bash
-npm run build
-npm login
-npm publish --access public
-```
 
 Bump `version` in `package.json` before each publish. If `samai-sdk` is ever taken on the registry, publish under a scope instead (e.g. `@samai/sdk`) rather than renaming the package.
