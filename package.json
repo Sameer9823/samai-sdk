@@ -1,7 +1,7 @@
 {
   "name": "samai-sdk",
   "version": "0.3.1",
-  "description": "SamAI SDK is a provider-agnostic TypeScript AI SDK for building AI agents, chatbots, tool calling, RAG, MCP, streaming, voice agents, and multi-provider LLM applications using OpenAI, Claude, Gemini, Groq, Mistral, Ollama, Azure OpenAI, and AWS Bedrock."
+  "description": "SamAI SDK is a provider-agnostic TypeScript AI SDK for building AI agents, chatbots, tool calling, RAG, MCP, streaming, voice agents, and multi-provider LLM applications using OpenAI, Claude, Gemini, Groq, Mistral, Ollama, Azure OpenAI, and AWS Bedrock.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
