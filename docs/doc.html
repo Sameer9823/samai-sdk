@@ -313,6 +313,46 @@
   .card h4{margin:0 0 8px; font-size:.92rem; color:var(--text); font-weight:600;}
   .card p{margin:0; font-size:.85rem; color:var(--text-dim);}
 
+  /* ============ Reason cards (numbered, "why choose" section) ============ */
+  .reason-list{display:flex; flex-direction:column; gap:2px; margin:20px 0;}
+  .reason{display:flex; gap:16px; padding:16px 4px; border-bottom:1px solid var(--line-soft);}
+  .reason:last-child{border-bottom:none;}
+  .reason-num{
+    font-family:var(--mono); font-size:.78rem; font-weight:700; color:var(--accent);
+    width:26px; height:26px; border-radius:7px; background:var(--accent-soft); border:1px solid var(--accent-dim);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px;
+  }
+  .reason-body h4{margin:0 0 5px; font-size:.92rem; color:var(--text); font-weight:600;}
+  .reason-body p{margin:0; font-size:.85rem; color:var(--text-dim);}
+
+  /* ============ Architecture flow diagram ============ */
+  .flow{
+    border:1px solid var(--line); background:var(--bg-inset); border-radius:var(--radius);
+    padding:28px 22px; margin:22px 0; display:flex; flex-direction:column; align-items:center; gap:0;
+  }
+  .flow-node{
+    width:100%; max-width:420px; border:1px solid var(--line-hover); background:var(--bg-raised);
+    border-radius:8px; padding:11px 16px; text-align:center; font-size:.82rem; color:var(--text);
+    font-family:var(--mono); position:relative; z-index:1;
+  }
+  .flow-node.start{border-color:var(--accent-dim); background:var(--accent-soft); color:var(--accent);}
+  .flow-node.end{border-color:var(--ok); background:rgba(107,220,154,.09); color:var(--ok);}
+  .flow-node .sub{display:block; font-family:var(--sans); color:var(--text-faint); font-size:.72rem; margin-top:3px;}
+  .flow-arrow{color:var(--text-faint); font-size:.85rem; padding:6px 0; line-height:1; font-family:var(--mono);}
+  .flow-branch{
+    display:flex; gap:14px; width:100%; max-width:640px; justify-content:center; flex-wrap:wrap; margin:2px 0;
+  }
+  .flow-branch .flow-node{max-width:290px; font-size:.78rem;}
+  .flow-node.danger{border-color:var(--danger); background:rgba(242,114,107,.08); color:var(--danger);}
+  .flow-node.loop{border-style:dashed; color:var(--text-dim);}
+  .flow-loopback{
+    font-family:var(--mono); font-size:.7rem; color:var(--text-faint); text-align:center; padding:4px 0 10px;
+  }
+  @media (max-width: 680px){
+    .flow{padding:20px 12px;}
+    .flow-branch{gap:10px;}
+  }
+
   .footer-nav{display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; border-top:1px solid var(--line-soft); padding-top:24px; margin-top:56px; font-size:.85rem;}
 
   .menu-toggle{display:none;}
@@ -536,6 +576,85 @@
         <div class="card"><h4>Real timeouts</h4><p><code>withTimeout()</code> uses an actual <code>AbortController</code> deadline. It doesn't infer "this looks like a timeout" from an error string after the fact.</p></div>
       </div>
       <p>Most agent frameworks pick a lane: a thin provider wrapper with no orchestration, or a full framework with its own state/deployment model that really only shines on one vendor. This sits deliberately in between — real orchestration, provider-agnostic by construction, on a runtime you can still read end to end (~6,900 lines across <code>src/</code>) when something misbehaves, rather than spelunking through a dependency tree.</p>
+
+      <h3><span class="h3-dot">›</span>Why choose samai-sdk</h3>
+      <div class="reason-list">
+        <div class="reason">
+          <span class="reason-num">1</span>
+          <div class="reason-body">
+            <h4>You're not betting on one model vendor</h4>
+            <p>Eight providers behind one <code>Provider</code> interface. Swap <code>anthropic({...})</code> for <code>openai({...})</code> and nothing else — tools, guardrails, tracing, sessions — changes. If a vendor changes pricing or rate-limits you, switching is a one-line change, not a rewrite.</p>
+          </div>
+        </div>
+        <div class="reason">
+          <span class="reason-num">2</span>
+          <div class="reason-body">
+            <h4>Safety is the default, not a checkbox you forget</h4>
+            <p>Approval-gated tools <strong>fail closed</strong> if you forget to wire up a handler — a risky tool cannot run unattended by accident. Guardrails throw typed errors with the reason attached. Every run produces a full trace whether you asked for it or not.</p>
+          </div>
+        </div>
+        <div class="reason">
+          <span class="reason-num">3</span>
+          <div class="reason-body">
+            <h4>It's small enough to actually read</h4>
+            <p>Under 2,500 lines of TypeScript for the core runtime. When something misbehaves at 2am, reading <code>run.ts</code> is a 10-minute task — not an afternoon spent in a framework's abstraction layers.</p>
+          </div>
+        </div>
+        <div class="reason">
+          <span class="reason-num">4</span>
+          <div class="reason-body">
+            <h4>It has the features other "minimal" SDKs make you build yourself</h4>
+            <p>MCP client, sandboxed code execution, voice/realtime sessions, resumable/checkpointed runs, multi-agent handoffs with loop prevention, four session-store backends, OpenTelemetry export, a local trace viewer — usually the reasons teams graduate to a heavyweight framework. Here they ship with the "thin" SDK.</p>
+          </div>
+        </div>
+        <div class="reason">
+          <span class="reason-num">5</span>
+          <div class="reason-body">
+            <h4>No lock-in, ever, by construction</h4>
+            <p>The runtime is written against <code>generate()</code>/<code>stream()</code> and never imports a vendor SDK directly. No proprietary state format, no hosted-only tracing, no platform you must deploy through. Sessions, checkpoints, and traces are data you own, in stores you control.</p>
+          </div>
+        </div>
+      </div>
+
+      <h3><span class="h3-dot">›</span>How it compares</h3>
+      <p>A qualitative snapshot against the frameworks people usually weigh this against. All of these move fast — treat this as directional, and check each project's own docs before deciding.</p>
+      <div class="table-wrap">
+        <table>
+          <tr><th></th><th>samai-sdk</th><th>LangChain.js</th><th>Vercel AI SDK</th><th>OpenAI Agents SDK</th><th>Mastra</th></tr>
+          <tr><td>Provider model</td><td>8 adapters, one interface</td><td>Many, separate packages</td><td>Many, <code>@ai-sdk/*</code> packages</td><td>OpenAI-first</td><td>Multiple</td></tr>
+          <tr><td>Agent runtime (loop, not just calls)</td><td>✅ built in</td><td>✅ (LangGraph)</td><td>Partial — you compose it</td><td>✅ built in</td><td>✅ built in</td></tr>
+          <tr><td>Multi-agent handoffs</td><td>✅ loop-safe, <code>maxHandoffs</code></td><td>✅ (graph-based)</td><td>❌ manual</td><td>✅</td><td>✅</td></tr>
+          <tr><td>Guardrails as first-class</td><td>✅ PII/injection/blocklist/schema/budget</td><td>Via custom chains</td><td>❌ manual</td><td>Partial</td><td>Partial</td></tr>
+          <tr><td>Approval / human-in-the-loop</td><td>✅ fails closed by default</td><td>Via custom graph nodes</td><td>❌ manual</td><td>Partial</td><td>Partial</td></tr>
+          <tr><td>Built-in tracing</td><td>✅ every run, no opt-in</td><td>Via LangSmith (external)</td><td>Via telemetry integrations</td><td>Via platform dashboard</td><td>✅</td></tr>
+          <tr><td>MCP client support</td><td>✅ stdio / HTTP / SSE</td><td>Emerging</td><td>Emerging</td><td>✅</td><td>✅</td></tr>
+          <tr><td>Sandboxed code execution</td><td>✅ process-isolated</td><td>❌ bring your own</td><td>❌ bring your own</td><td>❌ bring your own</td><td>Partial</td></tr>
+          <tr><td>Resumable / checkpointed runs</td><td>✅ file or in-memory store</td><td>✅ (LangGraph persistence)</td><td>❌ manual</td><td>Partial</td><td>Partial</td></tr>
+          <tr><td>Runtime source size</td><td>&lt; 2,500 lines</td><td>Large, many packages</td><td>Large, many packages</td><td>Moderate</td><td>Moderate</td></tr>
+          <tr><td>Vendor lock-in</td><td>None by construction</td><td>Low</td><td>Low–moderate</td><td>High (OpenAI-centric)</td><td>Low</td></tr>
+        </table>
+      </div>
+      <p class="dim">Short version: <code>samai-sdk</code> trades LangChain's breadth and Vercel AI SDK's frontend-streaming polish for a smaller, single-purpose surface — the agent-loop/guardrails/tracing primitives every serious agent needs, without a framework's opinions about everything else.</p>
+
+      <h3><span class="h3-dot">›</span>Architecture</h3>
+      <p>What happens inside a single <a href="#agent-runtime"><code>runAgent()</code></a> call — the tool loop, guardrails, handoffs, and tracing all run inside this one call.</p>
+      <div class="flow">
+        <div class="flow-node start">runAgent() / runAgentStream()<span class="sub">entry point</span></div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-node">Input guardrails<span class="sub">PII · prompt-injection · blocklist · budget</span></div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-node">Model call via Provider<span class="sub">wrapped transparently by withRetry / withFallback / withTimeout</span></div>
+        <div class="flow-arrow">↓ response</div>
+        <div class="flow-branch">
+          <div class="flow-node loop">Tool call(s)<span class="sub">→ tool guardrails → approval gate → execute()</span></div>
+          <div class="flow-node loop">handoff_to__&lt;agent&gt;<span class="sub">→ loop-prevention check → switch agent</span></div>
+          <div class="flow-node">Final text<span class="sub">→ output guardrails</span></div>
+        </div>
+        <div class="flow-loopback">tool result / new active agent loops back to the model call ↑</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-node end">RunResult + RunTrace<span class="sub">every call · tool · handoff · retry · fallback · timeout logged</span></div>
+      </div>
+      <div class="callout warn"><strong>Fails closed, not silent.</strong> A blocked input/output guardrail throws <code>GuardrailBlockedError</code>. A revisited handoff throws <code>HandoffLoopError</code>. An approval-gated tool with no handler wired up is rejected automatically. Nothing in this diagram quietly no-ops — see <a href="#error-handling">Error handling</a> for the full list.</div>
     </section>
 
     <section id="install">
