@@ -1,7 +1,7 @@
 {
   "name": "samai-sdk",
   "version": "0.3.1",
-  "description": "SamAI SDK — a unified, provider-agnostic AI agent runtime for TypeScript/JavaScript. Tool calling, MCP (Model Context Protocol) client support, sandboxed code execution, voice/realtime agents (TTS, transcription, and a WebSocket Realtime API session with interruption handling), multi-agent handoffs, guardrails, structured output, streaming, tracing (with OpenTelemetry export + a local trace viewer), RAG/vector search, resumable/checkpointed runs, rate limiting, and Redis/SQLite-backed sessions, covering OpenAI, Anthropic (Claude), Google Gemini, Groq, Mistral, Ollama, Azure OpenAI, and AWS Bedrock through one API.",
+  "description": "SamAI SDK is a provider-agnostic TypeScript AI SDK for building AI agents, chatbots, tool calling, RAG, MCP, streaming, voice agents, and multi-provider LLM applications using OpenAI, Claude, Gemini, Groq, Mistral, Ollama, Azure OpenAI, and AWS Bedrock."
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
