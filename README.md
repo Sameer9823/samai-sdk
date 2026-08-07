@@ -3,6 +3,7 @@
 [![npm](https://img.shields.io/npm/v/samai-sdk)](https://www.npmjs.com/package/samai-sdk)
 [![GitHub License](https://img.shields.io/github/license/Sameer9823/samai-sdk)](https://github.com/Sameer9823/samai-sdk/blob/master/LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-online-blue)](https://samai-sdk.vercel.app/)
+[![CI](https://github.com/Sameer9823/samai-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/Sameer9823/samai-sdk/actions/workflows/ci.yml)
 
 `samai-sdk` — a unified AI agent SDK covering **OpenAI**, **Anthropic (Claude)**, and **Google Gemini** — one API, swappable providers, with a real agent runtime, guardrails, tool calling, MCP (Model Context Protocol) client support, web search, and Redis/SQLite-backed sessions built in as first-class citizens instead of bolted on.
 
