@@ -1,0 +1,10 @@
+{
+  "app": {
+    "[project]/docs/app/docs/graph-memory/page": [],
+    "[project]/docs/app/docs/page": [],
+    "[project]/docs/app/page": []
+  },
+  "appUsingSizeAdjust": true,
+  "pages": {},
+  "pagesUsingSizeAdjust": false
+}

@@ -1,0 +1,215 @@
+@import "tailwindcss";
+
+:root {
+  /* ---- Surfaces: deep slate, not pure black ---- */
+  --bg-deep: #0a0d13;
+  --bg-panel: #10141d;
+  --bg-panel-raised: #151a26;
+  --bg-panel-hover: #1a2030;
+  --line: #212838;
+  --line-strong: #2c3448;
+
+  /* ---- Text ---- */
+  --text-primary: #e9ecf3;
+  --text-secondary: #aab1c2;
+  --text-muted: #6b7385;
+  --text-faint: #454c5e;
+
+  /* ---- Accent: electric blue = signal / data flow (dominant) ---- */
+  --signal-400: #7ba1ff;
+  --signal-500: #5c8dff;
+  --signal-600: #3d6ce8;
+  --signal-glow: rgba(92, 141, 255, 0.35);
+
+  /* ---- Accent: amber = guardrail / checkpoint / blocked (sparing, functional only) ---- */
+  --guard-400: #ffc670;
+  --guard-500: #ffb454;
+  --guard-glow: rgba(255, 180, 84, 0.3);
+
+  /* ---- Semantic ---- */
+  --ok-500: #4fd1a5;
+  --err-500: #ff6b6b;
+
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-label: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-code: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+
+@theme inline {
+  --color-bg-deep: var(--bg-deep);
+  --color-bg-panel: var(--bg-panel);
+  --color-bg-panel-raised: var(--bg-panel-raised);
+  --color-bg-panel-hover: var(--bg-panel-hover);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
+
+  --color-signal-400: var(--signal-400);
+  --color-signal-500: var(--signal-500);
+  --color-signal-600: var(--signal-600);
+
+  --color-guard-400: var(--guard-400);
+  --color-guard-500: var(--guard-500);
+
+  --color-ok-500: var(--ok-500);
+  --color-err-500: var(--err-500);
+}
+
+* {
+  border-color: var(--line);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  background-image:
+    radial-gradient(ellipse 900px 500px at 15% -10%, rgba(92, 141, 255, 0.10), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 90% 0%, rgba(255, 180, 84, 0.06), transparent 55%);
+  background-repeat: no-repeat;
+}
+
+::selection {
+  background: rgba(92, 141, 255, 0.35);
+  color: #fff;
+}
+
+/* Faint schematic grid used behind hero / section backdrops */
+.grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+.label-eyebrow {
+  font-family: var(--font-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.text-glow-signal {
+  text-shadow: 0 0 24px var(--signal-glow);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Scrollbar — quiet, matches panel system */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+  border: 2px solid var(--bg-deep);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a4358;
+}
+
+/* ---- Prose (docs content) ---- */
+.docs-prose {
+  color: var(--text-secondary);
+  font-size: 0.975rem;
+  line-height: 1.75;
+}
+.docs-prose h2 {
+  font-family: var(--font-display);
+  color: var(--text-primary);
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: 2.75rem;
+  margin-bottom: 1rem;
+  scroll-margin-top: 6rem;
+}
+.docs-prose h3 {
+  font-family: var(--font-display);
+  color: var(--text-primary);
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  scroll-margin-top: 6rem;
+}
+.docs-prose p {
+  margin-bottom: 1.1rem;
+}
+.docs-prose ul, .docs-prose ol {
+  margin-bottom: 1.1rem;
+  padding-left: 1.25rem;
+}
+.docs-prose li {
+  margin-bottom: 0.4rem;
+}
+.docs-prose li::marker {
+  color: var(--signal-500);
+}
+.docs-prose a {
+  color: var(--signal-400);
+  text-underline-offset: 3px;
+}
+.docs-prose a:hover {
+  text-decoration-color: var(--signal-400);
+}
+.docs-prose code:not(pre code) {
+  font-family: var(--font-code);
+  font-size: 0.85em;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--line);
+  padding: 0.15em 0.4em;
+  border-radius: 5px;
+  color: var(--guard-400);
+}
+.docs-prose strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.docs-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+}
+.docs-prose th {
+  text-align: left;
+  color: var(--text-primary);
+  font-family: var(--font-label);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line-strong);
+  padding: 0.6rem 0.75rem;
+}
+.docs-prose td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.6rem 0.75rem;
+  vertical-align: top;
+}
+
+.shiki {
+  background: var(--bg-panel) !important;
+}
