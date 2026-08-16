@@ -35,7 +35,7 @@ export function Hero() {
         >
           <span className="label-eyebrow inline-flex items-center gap-2 rounded-full border border-[var(--line-strong)] bg-[var(--bg-panel)] px-3 py-1.5 text-[var(--text-muted)]">
             <span className="h-1.5 w-1.5 rounded-full bg-[var(--signal-400)]" />
-            v0.3.2 · 8 providers · MIT licensed
+            v0.3.3 · 8 providers · MIT licensed
           </span>
 
           <h1
