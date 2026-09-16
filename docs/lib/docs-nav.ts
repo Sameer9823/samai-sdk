@@ -18,7 +18,7 @@ export const DOCS_NAV: DocGroup[] = [
       { href: "/docs/tools", label: "Tools & schemas" },
       { href: "/docs/mcp", label: "MCP (Model Context Protocol)" },
       { href: "/docs/sandbox", label: "Sandboxed code execution" },
-      { href: "/docs/voice", label: "Voice / realtime agents" },
+      { href: "/docs/voice", label: "Voice agents — pipeline, engine & realtime" },
       { href: "/docs/guardrails", label: "Guardrails & approval" },
       { href: "/docs/rag", label: "RAG / vector search" },
       { href: "/docs/graph-memory", label: "Graph memory (Neo4j)" },

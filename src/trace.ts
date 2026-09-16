@@ -14,6 +14,10 @@ export type TraceEvent =
   | { type: "approval-requested"; agentName: string; toolName: string; timestamp: number }
   | { type: "approval-resolved"; agentName: string; toolName: string; approved: boolean; timestamp: number }
   | { type: "run-completed"; timestamp: number }
+  | { type: "voice-turn"; agentName: string; transcript: string; timestamp: number }
+  | { type: "interruption"; agentName: string; reason: string; timestamp: number }
+  | { type: "clarification"; agentName: string; question: string; timestamp: number }
+  | { type: "goal-update"; agentName: string; goal: string; status: string; timestamp: number }
   | { type: "run-failed"; error: string; timestamp: number };
 
 export interface RunTrace {

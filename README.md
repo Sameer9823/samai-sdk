@@ -75,7 +75,14 @@ A fast lookup table — find the function you need, see what it does and where t
 | Give an agent per-user long-term memory | `enableGraphMemory()` | Neo4j-backed knowledge graph, background sweep, timestamped facts | [Graph memory](#graph-memory-neo4j) |
 | Share one DB connection across many users | `createGraphMemoryManager()` | One driver, per-user cache, no duplicate sweep timers | [Graph memory](#graph-memory-neo4j) |
 | Rank content for a feed | `createFeedEngine()` | Hybrid social-graph + interest-graph + engagement scoring | [Graph memory](#graph-memory-neo4j) |
-| Voice / realtime | `generateSpeech()` `transcribeAudio()` `createRealtimeSession()` | TTS/STT REST calls + a WebSocket realtime session | [Voice](#voice--realtime-agents) |
+| Voice — pipeline STT→LLM→TTS | `pipelineVoice({ stt, llm, tts })` + `defineVoiceAgent()` | Composable voice pipeline; any of the 8 text Providers as the LLM | [Voice — pipeline](#voice--pipeline-sttllmtts) |
+| Voice — conversation engine | `ConversationEngine` + `VoiceActivityDetector` + `InterruptionController` | Deterministic state machine (listening→thinking→speaking→interrupted), confidence-gated barge-in | [Voice — engine](#voice--conversation-engine) |
+| Voice — behavior | `IntentTracker` `ClarificationPolicy` `ResponseShaper` | Goal tracking, clarification strategy, response shaping / backchannel | [Voice — behavior](#voice--behavior) |
+| Voice — STT/TTS providers | `deepgramSTT()` `elevenLabsTTS()` | Deepgram & ElevenLabs adapters (both optional peer deps, lazy) | [Voice — providers](#voice--stttt-adapters) |
+| Voice — WebRTC transport | `WebRTCVoiceTransport` + signaling helpers | Browser RTCPeerConnection + Node-compatible mock fallback | [Voice — transport](#voice--webrtc-transport) |
+| Voice — realtime (OpenAI) | `openaiRealtime()` (wraps `createRealtimeSession()`) | Thin VoiceProvider adapter over the existing WebSocket session | [Voice — realtime](#voice--realtime-openai) |
+| Voice — React hook | `useVoiceAgent()` via `samai-sdk/react-voice` | Mirrors useAgent pattern for voice sessions | [Voice — React](#voice--react-hook) |
+| Voice / realtime (legacy REST) | `generateSpeech()` `transcribeAudio()` `createRealtimeSession()` | TTS/STT REST calls + raw WebSocket realtime session | [Voice](#voice--realtime-agents) |
 | Survive transient failures | `withRetry()` `withFallback()` `createResilientProvider()` | Backoff-with-jitter retries, provider fallback chains | [Retries](#retries-and-fallback-chains) |
 | Enforce a real deadline | `withTimeout()` | `AbortController`-based, not error-message pattern matching | [Timeouts](#timeouts) |
 | Cap concurrency / rate | `withConcurrencyLimit()` `withRateLimit()` | Queueing wrappers, composable with retry/fallback | [Concurrency](#concurrency-and-rate-limiting) |
@@ -228,7 +235,7 @@ All of the following is implemented, typechecked, built, and covered by the mock
 
 ## Roadmap
 
-Tier 3 (batch `generateObject()`, per-session/user cost tracking, Vue/Svelte hooks, deployment guide, Standard Schema/valibot support) is complete as of this pass, and `docs/index.html` has been brought up to date to cover it — every feature through Tier 3 now has a section there, cross-linked with this README. MCP client support (`createMCPClient()`), sandboxed code execution (`createSandbox()`/`createCodeExecutionTool()`/`createSandboxTools()`), and voice/realtime agents (`generateSpeech()`/`transcribeAudio()`/`createRealtimeSession()`) have since landed on top of that, closing the three biggest structural gaps against other agent SDKs. Not yet done: per-provider tool-`parameters` support for Standard Schema validators like valibot (currently scoped to `generateObject()`/`streamObject()`/`createSchemaGuardrail()`/`Agent.outputSchema` only — locally-defined tool definitions across the 8 provider adapters still require zod; MCP, sandbox, and realtime tools are unaffected, since they go through the `rawJsonSchema`/zod-passthrough path instead); a cost/usage *dashboard UI* (the ledger itself is done, a rendered view of it is not); true OS-level sandboxing (container/VM/network-namespace isolation) for `createSandbox()` — it currently provides process-level isolation only, by design, see its docs; and live verification of `createRealtimeSession()` against OpenAI's actual Realtime API — see the disclaimer in `src/voice.ts`, this was built and protocol-tested without network access to `api.openai.com`.
+Tier 3 (batch `generateObject()`, per-session/user cost tracking, Vue/Svelte hooks, deployment guide, Standard Schema/valibot support) is complete as of this pass, and `docs/index.html` has been brought up to date to cover it — every feature through Tier 3 now has a section there, cross-linked with this README. MCP client support (`createMCPClient()`), sandboxed code execution (`createSandbox()`/`createCodeExecutionTool()`/`createSandboxTools()`), and voice/realtime agents (`generateSpeech()`/`transcribeAudio()`/`createRealtimeSession()`) have since landed on top of that, closing the three biggest structural gaps against other agent SDKs. **Phase 1 voice subsystem** has now landed on top of that: a provider-agnostic `pipelineVoice({ stt, llm: Provider, tts })` composable with any of the 8 text Providers, a deterministic conversation engine (listening→thinking→speaking→interrupted) with confidence-gated barge-in via AbortController, STT/TTS adapters for Deepgram & ElevenLabs (optional lazy peers), WebRTC transport + signaling, `openaiRealtime()` as a thin VoiceProvider over RealtimeSession, and `useVoiceAgent()` via `samai-sdk/react-voice` — all with mock-based tests and OTEL/trace-viewer coverage. Not yet done: per-provider tool-`parameters` support for Standard Schema validators like valibot (currently scoped to `generateObject()`/`streamObject()`/`createSchemaGuardrail()`/`Agent.outputSchema` only — locally-defined tool definitions across the 8 provider adapters still require zod; MCP, sandbox, and realtime tools are unaffected, since they go through the `rawJsonSchema`/zod-passthrough path instead); a cost/usage *dashboard UI* (the ledger itself is done, a rendered view of it is not); true OS-level sandboxing (container/VM/network-namespace isolation) for `createSandbox()` — it currently provides process-level isolation only, by design, see its docs; and live verification of `createRealtimeSession()` against OpenAI's actual Realtime API — see the disclaimer in `src/voice.ts`, this was built and protocol-tested without network access to `api.openai.com`.
 
 ## Agents: defineAgent(), handoffs, sessions, and tracing
 
@@ -1391,7 +1398,33 @@ src/
   embeddings.ts             # EmbeddingProvider interface + openaiEmbeddings()
   mcp.ts                    # createMCPClient() — MCP server tools as ToolDefinitions (stdio/HTTP/SSE)
   sandbox.ts                # createSandbox() — isolated code execution + file I/O
-  voice.ts                  # generateSpeech() / transcribeAudio() / createRealtimeSession()
+  voice.ts                  # generateSpeech() / transcribeAudio() / createRealtimeSession() (legacy REST/WebSocket)
+  voice/
+    types.ts                # VoiceProvider / VoiceSession / VoiceAgentEvent / VoiceAgentConfig
+    voice-agent.ts          # defineVoiceAgent() / runVoiceAgent()  (mirrors defineAgent/runAgent)
+    conversation-engine.ts  # deterministic listening→thinking→speaking→interrupted state machine
+    interruption.ts         # InterruptionController — confidence-gated barge-in
+    testing.ts              # createMockSTTProvider / createMockTTSProvider / createMockVoiceTransport
+    behavior/
+      intent-tracker.ts     # IntentTracker — goal state persisted via Session
+      clarification-policy.ts # ClarificationPolicy
+      response-shaping.ts   # ResponseShaper — length hints, backchannel, seen-fact dedupe
+    pipeline/
+      pipeline-provider.ts  # pipelineVoice({ stt, llm, tts }) => VoiceProvider (composable with any Provider)
+      vad.ts                # VoiceActivityDetector + hasSentenceBoundary
+    stt/
+      types.ts              # STTProvider / STTSession
+      deepgram.ts           # deepgramSTT() — lazy @deepgram/sdk
+    tts/
+      types.ts              # TTSProvider / TTSSession
+      elevenlabs.ts         # elevenLabsTTS() — lazy elevenlabs
+    transport/
+      webrtc.ts             # WebRTCVoiceTransport (browser RTCPeerConnection + mock)
+      webrtc-signaling.ts   # createOffer / handleAnswer / handleOffer / addIceCandidate
+    realtime/
+      openai-realtime.ts    # openaiRealtime() — VoiceProvider over RealtimeSession
+    react/
+      use-voice-agent.ts    # useVoiceAgent() — samai-sdk/react-voice
   usage-ledger.ts          # createUsageLedger() — per-session/user cost & token tracking
   trace.ts                 # RunTrace — structured per-run tracing (incl. retry/fallback/timeout)
   trace-viewer.ts          # renderTraceHTML() — offline HTML timeline for a RunTrace

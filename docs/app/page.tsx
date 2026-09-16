@@ -122,7 +122,7 @@ export default function Home() {
               {[
                 { href: "/docs/mcp", label: "MCP client" },
                 { href: "/docs/sandbox", label: "Sandboxed execution" },
-                { href: "/docs/voice", label: "Voice / realtime" },
+                { href: "/docs/voice", label: "Voice agents — pipeline, engine & realtime" },
                 { href: "/docs/rag", label: "RAG / vector search" },
                 { href: "/docs/graph-memory", label: "Graph memory (Neo4j)" },
                 { href: "/docs/batch-output", label: "Batch output" },

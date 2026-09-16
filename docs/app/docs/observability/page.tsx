@@ -52,8 +52,28 @@ export default function ObservabilityPage() {
           <code>@opentelemetry/sdk-trace-base</code> in-memory exporter —
           actual span names, attributes, parent/child nesting, and status
           codes. The trace viewer starts the real CLI server and fetches
-          from it over HTTP.
+          from it over HTTP. Voice events (<code>voice-turn</code> /{" "}
+          <code>interruption</code> / <code>clarification</code> / <code>goal-update</code>) are included as short
+          child spans / timeline entries — no extra setup.
         </Callout>
+
+        <h2 id="voice-tracing">Voice tracing</h2>
+        <p>
+          Every <code>VoiceAgentEvent</code> also records into <code>RunTrace</code> — the same trace the agent loop
+          already uses. That means <code>exportRunTraceToOtel()</code> and <code>renderTraceHTML()</code> work for voice
+          sessions unchanged; interruptions, clarifications, and goal updates show up as spans / timeline entries
+          alongside model and tool calls.
+        </p>
+        <CodeBlock
+          code={`import { exportRunTraceToOtel, renderTraceHTML } from "samai-sdk";
+import { writeFileSync } from "node:fs";
+const session = await pipelineVoice({ stt, llm, tts }).connect({ agent, session: memSession });
+// ... drive the session via stt.simulateTranscript(...)
+await exportRunTraceToOtel((session as any)._trace);
+writeFileSync("voice-trace.html", renderTraceHTML((session as any)._trace));`}
+          lang="ts"
+          label="voice-tracing.ts"
+        />
       </DocPage>
       <DocPager current="/docs/observability" />
     </>

@@ -181,6 +181,18 @@ export async function exportRunTraceToOtel(trace: RunTrace, options: OtelExportO
         break;
       }
 
+      case "voice-turn": {
+        const span = tracer.startSpan("samai.voice_turn", { startTime: event.timestamp, attributes: { "samai.agent": event.agentName, "samai.transcript": event.transcript } }, parentCtx); span.end(event.timestamp); break;
+      }
+      case "interruption": {
+        const span = tracer.startSpan("samai.interruption", { startTime: event.timestamp, attributes: { "samai.agent": event.agentName, "samai.reason": event.reason } }, parentCtx); span.setStatus({ code: otel.SpanStatusCode.ERROR }); span.end(event.timestamp); break;
+      }
+      case "clarification": {
+        const span = tracer.startSpan("samai.clarification", { startTime: event.timestamp, attributes: { "samai.agent": event.agentName, "samai.question": event.question } }, parentCtx); span.end(event.timestamp); break;
+      }
+      case "goal-update": {
+        const span = tracer.startSpan("samai.goal_update", { startTime: event.timestamp, attributes: { "samai.agent": event.agentName, "samai.goal": event.goal, "samai.status": event.status } }, parentCtx); span.end(event.timestamp); break;
+      }
       case "run-failed":
         rootSpan.setStatus({ code: otel.SpanStatusCode.ERROR, message: event.error });
         break;

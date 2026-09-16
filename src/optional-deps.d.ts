@@ -72,3 +72,6 @@ declare module "@valibot/to-json-schema" {
 // `RealtimeSessionOptions`, `RealtimeEvent`) never reference `ws`'s types, so a consumer without
 // `ws`/`@types/ws` installed never needs them: they only see the compiled `dist/*.d.ts`, not
 // `voice.ts`'s internal `await import("ws")`.
+
+declare module "@deepgram/sdk" { const x:any; export default x; export const createClient:any; }
+declare module "elevenlabs" { const x:any; export default x; }

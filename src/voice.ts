@@ -131,7 +131,7 @@ export async function transcribeAudio(options: TranscribeAudioOptions): Promise<
     if (options.language) form.append("language", options.language);
     if (options.prompt) form.append("prompt", options.prompt);
     const filename = options.filename ?? "audio.wav";
-    const blob = new Blob([options.audio], { type: guessAudioMimeType(filename) });
+    const blob = new Blob([new Uint8Array(options.audio)], { type: guessAudioMimeType(filename) });
     form.append("file", blob, filename);
 
     const res = await fetch(`${baseURL}/audio/transcriptions`, {

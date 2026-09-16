@@ -19,6 +19,25 @@ console.log(result.output);     // "It's 18°C and cloudy in Tokyo."
 
 mock.reset(); // clears the call log so the same mock instance can be reused across test cases`;
 
+const VOICE_CODE = `import { pipelineVoice } from "samai-sdk/voice";
+import { createMockSTTProvider, createMockTTSProvider } from "samai-sdk/voice/testing";
+import { createMockProvider } from "samai-sdk/testing";
+import { defineVoiceAgent } from "samai-sdk/voice";
+
+const stt = createMockSTTProvider();
+const tts = createMockTTSProvider();
+const llm = createMockProvider({ responses: [{ text: "Hello there!" }] });
+
+const provider = pipelineVoice({ stt, llm, tts });
+const agent = defineVoiceAgent({ name: "greeter", instructions: "Be brief.", model: "mock" });
+const session = await provider.connect({ agent });
+
+session.on("agent-speech-ended", () => console.log("TTS done"));
+stt.simulateTranscript("hi there", { confidence: 0.98 }); // drives STT→LLM→TTS deterministically
+
+// also: createMockVoiceTransport() for WebRTC transport tests
+// no audio deps, no network — fully deterministic`;
+
 export default function TestingPage() {
   return (
     <>
@@ -37,6 +56,15 @@ export default function TestingPage() {
           instead of an array if a turn&apos;s response needs to depend on
           what the agent loop actually sent.
         </Callout>
+
+        <h2 id="voice-mocks">Voice pipeline mocks</h2>
+        <p>
+          <code>createMockSTTProvider()</code> / <code>createMockTTSProvider()</code> /{" "}
+          <code>createMockVoiceTransport()</code> (from <code>samai-sdk/voice/testing</code>) let you drive the full
+          STT→LLM→TTS pipeline deterministically — <code>simulateTranscript()</code> feeds a transcript, the pipeline
+          calls the LLM and then TTS, and you can assert on events. No audio libraries or network required.
+        </p>
+        <CodeBlock code={VOICE_CODE} lang="ts" label="voice-mocks.ts" />
       </DocPage>
       <DocPager current="/docs/testing" />
     </>

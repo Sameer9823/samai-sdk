@@ -21,6 +21,10 @@ const EVENT_COLORS: Record<string, string> = {
   "guardrail-triggered": "#f5716a",
   "approval-requested": "#F5A623",
   "approval-resolved": "#8fe3a8",
+  "voice-turn": "#a78bfa",
+  interruption: "#f5716a",
+  clarification: "#fbbf24",
+  "goal-update": "#34d399",
 };
 
 function escapeHtml(s: string): string {
@@ -55,6 +59,14 @@ function summarize(event: TraceEvent): string {
       return `${event.agentName} · ${event.toolName} · ${event.approved ? "approved" : "rejected"}`;
     case "run-completed":
       return "success";
+    case "voice-turn":
+      return event.agentName + " · " + event.transcript;
+    case "interruption":
+      return event.agentName + " · " + event.reason;
+    case "clarification":
+      return event.agentName + " · " + event.question;
+    case "goal-update":
+      return event.agentName + " · " + event.goal + " (" + event.status + ")";
     case "run-failed":
       return event.error;
     default:

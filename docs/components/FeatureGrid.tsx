@@ -50,8 +50,8 @@ const FEATURES = [
   },
   {
     icon: Mic,
-    title: "Voice & realtime",
-    body: "createRealtimeSession() streams audio/text over WebSocket with barge-in support, plus REST wrappers for TTS and transcription.",
+    title: "Voice — pipeline, engine & realtime",
+    body: "pipelineVoice({ stt, llm, tts }) composable with any Provider, deterministic ConversationEngine (confidence-gated barge-in), Deepgram/ElevenLabs adapters, WebRTC transport, and useVoiceAgent() — plus createRealtimeSession() over WebSocket.",
     tone: "signal",
   },
   {

@@ -101,6 +101,24 @@ export default function ReactPage() {
           in the SDK requires it. See <code>examples/react-usage.tsx</code>{" "}
           for the full version.
         </Callout>
+
+        <h2 id="voice">Voice: useVoiceAgent</h2>
+        <p>
+          <code>samai-sdk/react-voice</code> exports <code>useVoiceAgent(provider, agent)</code> — same shape as{" "}
+          <code>useAgent</code> but for voice sessions. It exposes <code>isConnected</code> / <code>isSpeaking</code> /{" "}
+          <code>isListening</code> / <code>transcript</code> plus <code>connect()</code> / <code>disconnect()</code> /{" "}
+          <code>sendAudio()</code> / <code>interrupt()</code>, and subscribes to <code>VoiceSession</code> events
+          internally. The underlying transport (<code>pipelineVoice</code> or <code>openaiRealtime</code>) is
+          interchangeable — the hook doesn&apos;t care.
+        </p>
+        <CodeBlock
+          code={`import { useVoiceAgent } from "samai-sdk/react-voice";
+import { pipelineVoice } from "samai-sdk/voice";
+const { isConnected, isSpeaking, transcript, connect, disconnect, sendAudio, interrupt } =
+  useVoiceAgent(provider, agent);`}
+          lang="tsx"
+          label="useVoiceAgent.tsx"
+        />
       </DocPage>
       <DocPager current="/docs/react" />
     </>
