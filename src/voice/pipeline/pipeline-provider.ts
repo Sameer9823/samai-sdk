@@ -6,7 +6,7 @@ import { createClient, GuardrailBlockedError } from "../../client.js";
 import { executeToolCalls } from "../../tool-loop.js";
 import { createTrace, recordEvent, addUsage, finishTrace, type RunTrace } from "../../trace.js";
 import { ConversationEngine } from "../conversation-engine.js";
-import { randomUUID } from "node:crypto";
+import { randomUUID } from "../../uuid.js";
 import { hasSentenceBoundary } from "./vad.js";
 
 export interface PipelineVoiceOptions { stt: STTProvider; llm: Provider; tts: TTSProvider; }

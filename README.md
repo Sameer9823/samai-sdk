@@ -20,7 +20,7 @@ npx samai-sdk create my-agent --provider anthropic && cd my-agent && npm install
 - [Feature reference](#feature-reference) — jump straight to any API
 - [Agents: defineAgent(), handoffs, sessions, tracing](#agents-defineagent-handoffs-sessions-and-tracing)
 - [Documentation](#documentation) · [Install](#install) · [Quick start](#quick-start) · [Providers](#providers)
-- [Web search](#web-search) · [MCP](#mcp-model-context-protocol) · [Sandboxed code execution](#sandboxed-code-execution) · [Voice / realtime](#voice--realtime-agents) · [RAG](#rag--vector-search) · [Graph memory](#graph-memory-neo4j)
+- [Web search](#web-search) · [MCP](#mcp-model-context-protocol) · [Sandboxed code execution](#sandboxed-code-execution) · [Voice / realtime](#voice--realtime-agents) · [Browser voice (WebRTC)](#browser-quick-start-webrtc) · [RAG](#rag--vector-search) · [Graph memory](#graph-memory-neo4j)
 - [Guardrails](#guardrails) · [Structured output](#structured-output-with-generateobject) · [Retries/fallback/timeouts](#retries-and-fallback-chains)
 - [Testing](#testing-your-agents) · [Observability](#observability-tracing-opentelemetry-and-a-local-trace-viewer) · [Error handling](#error-handling)
 - [Project layout](#project-layout) · [CLI](#cli) · [Publishing](#publishing-to-npm)
@@ -674,7 +674,111 @@ Supported languages: `"javascript"` (runs as an ES module via `node` — `import
 
 ## Voice / realtime agents
 
-⚠️ **Verification note.** `generateSpeech()`/`transcribeAudio()` are straightforward REST calls (same shape as `createWebSearchTool()`'s Tavily/Brave calls) — low risk, but this SDK's dev environment can't reach `api.openai.com`, so they haven't been exercised against a live key. `createRealtimeSession()`'s wire-protocol logic (connection handshake, event parsing, base64 audio, tool-call round-tripping) *has* been verified — against a real local mock WebSocket server, which caught and fixed a genuine bug where `connect()` resolved before the server actually confirmed the session, and a header-vs-subprotocol auth gap. What's *not* verified is whether OpenAI's live server uses exactly the event names/fields implemented here — that API moves fast. Read the disclaimer at the top of `src/voice.ts`, and verify against a real key before production use.
+> **Realtime is GA, not preview (0.3.6+).** The OpenAI Realtime *preview* API is retired, and this SDK targets the GA interface: default model `gpt-realtime`, `session.type: "realtime"`, audio config nested under `session.audio.input`/`session.audio.output`, ephemeral client secrets, and **no `OpenAI-Beta` header**. If you were on `gpt-4o-realtime-preview`, move the model and drop any preview-only parameters — GA rejects a session that asks for both text and audio output. `RealtimeSessionOptions.protocol` is gone. See the [CHANGELOG](./CHANGELOG.md) for the full breaking-change list.
+
+⚠️ **Verification note.** `generateSpeech()`/`transcribeAudio()` are straightforward REST calls (same shape as `createWebSearchTool()`'s Tavily/Brave calls) — low risk, but this SDK's dev environment can't reach `api.openai.com`, so they haven't been exercised against a live key. `createRealtimeSession()`'s wire-protocol logic (connection handshake, event parsing, base64 audio, tool-call round-tripping) *has* been verified — against a real local mock WebSocket server, which caught and fixed a genuine bug where `connect()` resolved before the server actually confirmed the session, and a header-vs-subprotocol auth gap. The WebRTC transport, client-secret minting, and the GA session shape are verified the same way, against fake browser globals and an injected `fetch` (`npm run example:voice-realtime-ga-test`). What's *not* verified is whether OpenAI's live server uses exactly the event names/fields implemented here — that API moves fast. Read the disclaimer at the top of `src/voice.ts`, and verify against a real key before production use.
+
+### Browser quick start (WebRTC)
+
+`samai-sdk/voice` is browser-safe: it imports no `node:*` modules and uses no unguarded `Buffer`, so `npm i samai-sdk` is the whole install. No patch-package, no vendored fork. The long-lived API key never leaves your server — the browser holds a short-lived `ek_…` client secret instead.
+
+**1. The agent**, shared by the route and the client:
+
+```ts
+// lib/agent.ts
+import { defineTool, defineVoiceAgent } from "samai-sdk/voice";
+import { z } from "zod";
+
+export const getTimeTool = defineTool({
+  name: "get_time",
+  description: "Gets the current time in the user's timezone",
+  parameters: z.object({ timezone: z.string().optional() }),
+  execute: async ({ timezone }) => new Date().toLocaleTimeString("en-US", { timeZone: timezone }),
+});
+
+export const agent = defineVoiceAgent({
+  name: "assistant",
+  instructions: "You are a helpful, concise voice assistant.",
+  model: "gpt-realtime",
+  tools: [getTimeTool],
+});
+```
+
+**2. The server route** — the only code that touches `OPENAI_API_KEY`, calling the GA `POST /v1/realtime/client_secrets` endpoint:
+
+```ts
+// app/api/realtime-secret/route.ts
+import { NextResponse } from "next/server";
+import { createRealtimeClientSecret } from "samai-sdk/voice";
+
+export async function POST() {
+  const { value, expiresAt } = await createRealtimeClientSecret({
+    apiKey: process.env.OPENAI_API_KEY!,
+    model: "gpt-realtime",
+    ttlSeconds: 600, // 10–7200; the browser holds the secret for this long
+    safetyIdentifier: "user-1234", // OpenAI's abuse-tracking header
+  });
+  return NextResponse.json({ clientSecret: value, expiresAt });
+}
+```
+
+**3. The client** — fetch the secret, ask for the mic yourself, connect over WebRTC. The browser hands its track to the API and the assistant's voice comes back as a `MediaStream` for an `<audio>` element: no base64 PCM plumbing, no playback buffer to manage.
+
+```tsx
+"use client";
+// components/VoiceAgent.tsx
+import { useRef, useState } from "react";
+import { openaiRealtime, stopMediaStream } from "samai-sdk/voice";
+import { agent } from "@/lib/agent";
+
+export function VoiceAgent() {
+  const [status, setStatus] = useState("idle");
+  const [caption, setCaption] = useState("");
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const sessionRef = useRef<any>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  async function start() {
+    const { clientSecret } = await fetch("/api/realtime-secret", { method: "POST" }).then((r) => r.json());
+
+    // Request the mic in the app, so permission errors stay yours to surface.
+    const inputStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    streamRef.current = inputStream;
+
+    // transport: "webrtc" is implied by inputStream. With no client secret this
+    // throws rather than shipping a long-lived key to the browser.
+    const session = await openaiRealtime({ clientSecret, inputStream }).connect({ agent });
+    sessionRef.current = session;
+
+    if (audioRef.current && session.getRemoteStream()) {
+      audioRef.current.srcObject = session.getRemoteStream();
+      await audioRef.current.play();
+    }
+
+    session.on("assistant-transcript-delta", (e) => setCaption((c) => c + e.delta));
+    session.on("user-transcript-delta", (e) => setCaption((c) => c + e.delta));
+    session.on("connection-state", (e) => setStatus(e.state));
+  }
+
+  async function stop() {
+    await sessionRef.current?.close();
+    stopMediaStream(streamRef.current); // release the microphone
+    sessionRef.current = null;
+    streamRef.current = null;
+    setStatus("idle");
+  }
+
+  return (
+    <div>
+      <button onClick={status === "idle" ? start : stop}>{status === "idle" ? "Talk" : status}</button>
+      <p>{caption}</p>
+      <audio ref={audioRef} autoPlay />
+    </div>
+  );
+}
+```
+
+Turn-taking and barge-in come from OpenAI's server-side VAD, so there's no push-to-talk button. On a host without `RTCPeerConnection` — or for a server-side agent — use the WebSocket transport (`openaiRealtime({ clientSecret })`), which owns its playback buffer and calls `truncateLastResponse()` on barge-in. `OpenAIRealtimeWebRTCTransport`, `WebRTCVoiceTransport`, the signaling helpers (`createOffer`/`handleAnswer`/`handleOffer`/`addIceCandidate`), `ConversationEngine`, `VoiceActivityDetector`, `InterruptionController`, and the test doubles are all exported from `samai-sdk/voice` if you want to drive the pieces yourself.
 
 **Text-to-speech and transcription:**
 
@@ -702,7 +806,7 @@ const session = createRealtimeSession({
 session.on((event) => {
   if (event.type === "audio.delta") playAudioChunk(event.audio); // your speaker output
   if (event.type === "transcript.delta") process.stdout.write(event.delta);
-  if (event.type === "speech_started") stopSpeakerPlayback(); // user is talking over the assistant — barge-in
+  if (event.type === "speech_started") session.truncateLastResponse(playedMs); // barge-in: drop what wasn't played
 });
 
 await session.connect();
@@ -715,7 +819,7 @@ session.interrupt();
 await session.close();
 ```
 
-`createRealtimeSession()` handles the network/protocol side only — pairing it with actual microphone capture and speaker playback is up to your app (Node has no built-in audio I/O). On Node < 22, or when you need header-based auth (the default — recommended over the subprotocol fallback), install the optional `ws` peer dependency; without it, connections fall back to OpenAI's documented subprotocol-based auth, which works but is the less common path.
+This is the WebSocket transport, for servers and any host without WebRTC. It handles the network/protocol side only — pairing it with actual microphone capture and speaker playback is up to your app, which is also why it owns the playback buffer and has to call `truncateLastResponse(playedMs)` when the user barges in (`interrupt()` does this for you). The global `WebSocket` is preferred and is all browsers, edge runtimes, and Node 22+ need; on Node < 22, or for header-based auth, install the optional `ws` peer dependency. Without it, connections authenticate via OpenAI's documented subprotocol scheme instead.
 
 ## RAG / vector search
 
@@ -1421,10 +1525,13 @@ src/
     transport/
       webrtc.ts             # WebRTCVoiceTransport (browser RTCPeerConnection + mock)
       webrtc-signaling.ts   # createOffer / handleAnswer / handleOffer / addIceCandidate
+      openai-webrtc.ts      # OpenAIRealtimeWebRTCTransport + createRealtimeClientSecret() (GA /v1/realtime/calls)
     realtime/
-      openai-realtime.ts    # openaiRealtime() — VoiceProvider over RealtimeSession
+      openai-realtime.ts    # openaiRealtime() — VoiceProvider over WebRTC or the WebSocket session
     react/
       use-voice-agent.ts    # useVoiceAgent() — samai-sdk/react-voice
+  bytes.ts                 # base64/binary helpers with no Buffer dependency (Node, browser, edge)
+  uuid.ts                  # browser-safe randomUUID() (no node:crypto)
   usage-ledger.ts          # createUsageLedger() — per-session/user cost & token tracking
   trace.ts                 # RunTrace — structured per-run tracing (incl. retry/fallback/timeout)
   trace-viewer.ts          # renderTraceHTML() — offline HTML timeline for a RunTrace
@@ -1497,8 +1604,11 @@ npx samai-sdk trace <trace-file.json> [--port 4949]
 ## Scripts
 
 ```bash
-npm run build       # bundle to dist/ (ESM + CJS + .d.ts): index, react, vue, svelte, cli
+npm run build       # bundle to dist/ (ESM + CJS + .d.ts): index, react, vue, svelte, cli, voice, react-voice
 npm run typecheck   # tsc --noEmit
+npm run check:exports  # fails if any package.json path is missing from dist/ (run after build)
+npm run check:browser  # bundles samai-sdk/voice for the browser; fails on any Node built-in or unguarded Buffer/process
+npm run verify      # build + check:exports + check:browser — this is what prepublishOnly runs
 npm run example:basic
 npm run example:agent-handoff                  # multi-agent handoff demo (needs ANTHROPIC_API_KEY)
 npm run example:agent-runtime-mock-test        # agent loop + handoffs + sessions, no API key needed
@@ -1526,9 +1636,10 @@ npm run example:graph-memory-admin-mock-test                       # DB constrai
 npm run example:graph-memory-fact-lifecycle-mock-test               # upsert_fact timestamping/contradictions + decay math + injection rejection
 npm run example:graph-memory-metrics-mock-test                       # createMetricsCollector() aggregation across all recorded events
 npm run example:graph-memory-manager-mock-test                        # shared driver across users, closed exactly once on stopAll()
-npm test                                       # runs all mock-test examples together (28 suites)
+npm run example:voice-realtime-ga-test        # GA session shape, client-secret minting, WebRTC SDP handshake — fake browser globals, no key
+npm test                                       # runs all mock-test examples together (39 suites)
 ```
 
-
-
 Bump `version` in `package.json` before each publish. If `samai-sdk` is ever taken on the registry, publish under a scope instead (e.g. `@samai/sdk`) rather than renaming the package.
+
+`prepublishOnly` runs `npm run verify`, which builds and then runs both guards: `check:exports` (every path in `package.json` must exist on disk — this is what would have caught the broken `./react-voice` export in 0.3.5) and `check:browser` (`samai-sdk/voice` must bundle for a browser with no Node built-ins reachable). Both are part of `npm test` too, so neither can regress unnoticed.

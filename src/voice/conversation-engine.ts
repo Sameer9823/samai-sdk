@@ -7,7 +7,29 @@ import { ResponseShaper } from "./behavior/response-shaping.js";
 import type { RunTrace } from "../trace.js";
 import { recordEvent } from "../trace.js";
 
-export type ConversationState = "idle" | "listening" | "thinking" | "speaking" | "interrupted";
+export type ConversationState =
+  /** No session, or the session was closed. */
+  | "idle"
+  /** Transport is being established. */
+  | "connecting"
+  /** Session is up and waiting for the user to say something. */
+  | "listening"
+  /** The user is mid-utterance. */
+  | "user_speaking"
+  /** The user's turn ended; the assistant is composing a response. */
+  | "thinking"
+  /** Legacy alias for `assistant_speaking`, kept for the pipeline provider. */
+  | "speaking"
+  | "assistant_speaking"
+  /** The assistant was cut off; the audio is being stopped. */
+  | "interrupting"
+  /** Legacy alias for `interrupting`, kept for the pipeline provider. */
+  | "interrupted"
+  /** The transport dropped and a new session is being established. */
+  | "reconnecting"
+  /** Unrecoverable failure. */
+  | "error";
+
 export interface ConversationEngineOptions {
   agent: VoiceAgentConfig;
   session?: import("../session.js").Session;
@@ -30,6 +52,7 @@ export class ConversationEngine {
   private currentTranscript = "";
   private partialContext = "";
   private isSpeakingLongTurn = false;
+  private reconnectAttempt = 0;
   constructor(opts: ConversationEngineOptions) {
     this.agent = opts.agent;
     this.trace = opts.trace;
@@ -45,6 +68,21 @@ export class ConversationEngine {
   getState(): ConversationState { return this.state; }
   getIntentTracker(): IntentTracker { return this.intentTracker; }
   getPartialContext(): string { return this.partialContext; }
+  /**
+   * Transport lifecycle. Kept out of the event stream (it isn't a `VoiceAgentEvent`) so callers read
+   * it by polling `getState()`, which is what a reconnect loop needs.
+   */
+  handleConnecting(): void { this.state = "connecting"; }
+  handleConnected(): void {
+    this.state = "listening";
+    this.vad.reset();
+    this.interruption.reset();
+  }
+  handleReconnecting(attempt: number): void { this.state = "reconnecting"; this.reconnectAttempt = attempt; }
+  handleError(): void { this.state = "error"; }
+  getReconnectAttempt(): number { return this.reconnectAttempt; }
+  /** True while the assistant holds the turn. */
+  isAssistantSpeaking(): boolean { return this.state === "speaking" || this.state === "assistant_speaking"; }
   private emit(event: VoiceAgentEvent): void {
     if (this.onEvent) this.onEvent(event);
     if (this.trace) {
@@ -55,6 +93,46 @@ export class ConversationEngine {
     }
   }
   handleUserSpeechStarted(): void { this.state = "listening"; this.currentTranscript = ""; this.emit({ type: "user-speech-started" }); }
+  /**
+   * The realtime path: the transport's server-side VAD reported the user started talking. Kept
+   * distinct from `handleUserSpeechStarted()` so the pipeline's `listening` state is unchanged.
+   */
+  handleUserSpeaking(): void { this.state = "user_speaking"; this.currentTranscript = ""; this.emit({ type: "user-speech-started" }); }
+  /** Streaming user transcript. An empty delta marks the start of a new turn. */
+  handleUserTranscriptDelta(delta: string): void {
+    if (!delta) this.currentTranscript = "";
+    else this.currentTranscript += delta;
+    this.emit({ type: "user-transcript-delta", delta });
+  }
+  handleUserTranscriptDone(transcript: string, confidence: number): void {
+    this.currentTranscript = transcript;
+    this.handleUserSpeechEnded(transcript, confidence);
+  }
+  /** Streaming assistant transcript, while audio is being produced for the same response. */
+  handleAssistantTranscriptDelta(delta: string): void {
+    this.emit({ type: "assistant-transcript-delta", delta });
+  }
+  /** Final assistant transcript. `interrupted` marks a response the user cut short. */
+  handleAssistantTranscriptDone(transcript: string, interrupted = false): void {
+    this.emit({ type: "assistant-transcript-done", transcript });
+    if (interrupted) this.emit({ type: "response-cancelled" });
+  }
+  /**
+   * The user started talking while the assistant was speaking. Moves to `interrupting` so the
+   * caller can stop playback immediately, and applies the configured barge-in gate — a cough or a
+   * keyboard click should not cut the assistant off.
+   */
+  handleUserBeganSpeakingOverAssistant(candidate: { confidence: number; durationMs: number; transcript?: string } = { confidence: 1, durationMs: 1000 }): boolean {
+    if (this.isAssistantSpeaking()) {
+      const gated = this.interruption.observeWhileSpeaking(candidate);
+      if (!gated.shouldInterrupt) return false;
+      this.state = "interrupting";
+      this.emit({ type: "interruption", reason: gated.reason! });
+      return true;
+    }
+    this.handleUserSpeaking();
+    return true;
+  }
   handleUserSpeechEnded(transcript: string, confidence: number): VoiceAgentEvent | null {
     const isCorrection = /^\s*(no[,\s]+|actually[\s]*|i meant[\s]*|correction)/i.test(transcript);
     if (isCorrection && this.partialContext) {
@@ -71,10 +149,18 @@ export class ConversationEngine {
   }
   handleAgentThinking(): void { this.state = "thinking"; this.emit({ type: "agent-thinking" }); }
   handleAgentSpeechStarted(): void { this.state = "speaking"; this.isSpeakingLongTurn = false; this.emit({ type: "agent-speech-started" }); }
+  /**
+   * The realtime path, which distinguishes "the assistant is audible" from "the assistant has been
+   * interrupted but its audio is still draining". Keeps the pipeline's `speaking` state unchanged.
+   */
+  handleAgentSpeaking(): void { this.state = "assistant_speaking"; this.isSpeakingLongTurn = false; this.emit({ type: "agent-speech-started" }); }
+  handleAssistantStopped(): void { this.state = "listening"; this.emit({ type: "agent-speech-ended" }); }
+  /** The assistant was cut off by the user; back to listening for their continued turn. */
+  handleAssistantInterrupted(): void { this.state = "listening"; this.emit({ type: "agent-speech-ended" }); }
   handleAgentAudioChunk(chunk: ArrayBuffer): void { this.emit({ type: "agent-audio-chunk", chunk }); }
-  handleAgentSpeechEnded(): void { if (this.state === "speaking" || this.state === "interrupted") { this.state = "idle"; this.emit({ type: "agent-speech-ended" }); } }
+  handleAgentSpeechEnded(): void { if (this.state === "speaking" || this.state === "interrupted" || this.state === "assistant_speaking" || this.state === "interrupting") { this.state = "idle"; this.emit({ type: "agent-speech-ended" }); } }
   handleBargeIn(candidate: { confidence: number; durationMs: number; transcript?: string }): boolean {
-    if (this.state !== "speaking") return false;
+    if (!this.isAssistantSpeaking()) return false;
     const decision = this.interruption.observeWhileSpeaking(candidate);
     if (!decision.shouldInterrupt) return false;
     this.state = "interrupted";

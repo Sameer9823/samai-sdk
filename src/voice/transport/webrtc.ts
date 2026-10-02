@@ -1,6 +1,11 @@
 /// <reference lib="dom" />
 type Handler = (data?: any) => void;
 
+/**
+ * Minimal WebRTC peer-connection holder: owns an `RTCPeerConnection`, wires the standard
+ * lifecycle events, and lets callers add tracks. Provider-specific negotiation (for example
+ * OpenAI's SDP offer/answer over `/realtime/calls`) lives in subclasses.
+ */
 export class WebRTCVoiceTransport {
   private pc: RTCPeerConnection | null = null;
   private handlers = new Map<string, Set<Handler>>();
@@ -13,7 +18,7 @@ export class WebRTCVoiceTransport {
     this.isMock = typeof (globalThis as any).RTCPeerConnection === "undefined";
   }
 
-  private emit(event: string, data?: any) {
+  protected emit(event: string, data?: any) {
     this.handlers.get(event)?.forEach((h) => { try { h(data); } catch {} });
   }
 
@@ -26,10 +31,25 @@ export class WebRTCVoiceTransport {
   async connect(): Promise<void> {
     if (this.isMock) return;
     if (this.pc) return;
-    this.pc = new RTCPeerConnection({ iceServers: this.iceServers });
-    this.pc.onicecandidate = (e: RTCPeerConnectionIceEvent) => { if (e.candidate) this.emit("icecandidate", e.candidate); };
-    (this.pc as any).ontrack = (e: any) => this.emit("track", e);
-    this.pc.onconnectionstatechange = () => this.emit("connectionstatechange", (this.pc as any)?.connectionState);
+    this.attachPeerConnection(new RTCPeerConnection({ iceServers: this.iceServers }));
+  }
+
+  /** The ICE servers this transport was configured with. */
+  getIceServers(): RTCIceServer[] {
+    return [...this.iceServers];
+  }
+
+  /**
+   * Installs a peer connection and wires its lifecycle events. Subclasses use this to negotiate
+   * with a specific provider and to reuse the standard `icecandidate`/`track`/`connectionstatechange`
+   * events without re-implementing them.
+   */
+  protected attachPeerConnection(pc: RTCPeerConnection): RTCPeerConnection {
+    pc.onicecandidate = (e: RTCPeerConnectionIceEvent) => { if (e.candidate) this.emit("icecandidate", e.candidate); };
+    pc.ontrack = (e: any) => this.emit("track", e);
+    pc.onconnectionstatechange = () => this.emit("connectionstatechange", (pc as any)?.connectionState);
+    this.pc = pc;
+    return pc;
   }
 
   addAudioTrack(track: MediaStreamTrack | any): void {
@@ -52,4 +72,12 @@ export class WebRTCVoiceTransport {
   getMockTracks(): any[] { return [...this.mockTracks]; }
   getPeerConnection(): RTCPeerConnection | null { return this.pc; }
   get isMockMode(): boolean { return this.isMock; }
+}
+
+/** Stops every track on a stream. Call this when ending a conversation to release the microphone. */
+export function stopMediaStream(stream: MediaStream | null | undefined): void {
+  if (!stream) return;
+  for (const track of stream.getTracks()) {
+    try { track.stop(); } catch {}
+  }
 }

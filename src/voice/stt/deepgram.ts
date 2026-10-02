@@ -1,4 +1,5 @@
 import type { STTProvider, STTSession, STTStreamOptions, STTResult } from "./types.js";
+import { toUint8Array } from "../../bytes.js";
 
 export function deepgramSTT(config: { apiKey?: string; model?: string } = {}): STTProvider {
   return {
@@ -19,16 +20,16 @@ export function deepgramSTT(config: { apiKey?: string; model?: string } = {}): S
         return session;
       }
 
-      // Real path — lazy import
+      // Real path — lazy import of the optional peer dependency.
+      // The specifier is held in a variable on purpose: a literal `import("...")` would be resolved
+      // statically by browser bundlers, which fails the whole client build whenever this optional
+      // package isn't installed, even though the app never calls deepgramSTT().
+      const specifier = "@deepgram/sdk";
       let mod: any = null;
-      // @ts-ignore dynamic optional dep
-      try { mod = await import("@deepgram/sdk"); }
-      catch { try { // @ts-ignore
-        // @ts-ignore
-        mod = await import("deepgram-sdk"); } catch {} }
+      try { mod = await import(/* webpackIgnore: true */ /* @vite-ignore */ specifier); } catch {}
       if (!mod) {
         throw new Error(
-          "Deepgram SDK not installed. Install with: npm i @deepgram/sdk (or deepgram-sdk). " +
+          "Deepgram SDK not installed. Install with: npm i @deepgram/sdk. " +
           "Then set apiKey in deepgramSTT({ apiKey })."
         );
       }
@@ -74,7 +75,8 @@ export function deepgramSTT(config: { apiKey?: string; model?: string } = {}): S
       const session: STTSession & { simulateTranscript: (t: string, f?: boolean) => void } = {
         sendAudio(chunk: ArrayBuffer) {
           if (closed) return;
-          try { live.send(Buffer ? Buffer.from(chunk) : chunk); } catch (e) { options.onError?.(e as Error); }
+          // `Buffer` only exists in Node; `toUint8Array` keeps this path working in browsers too.
+          try { live.send(toUint8Array(chunk)); } catch (e) { options.onError?.(e as Error); }
         },
         async close() {
           if (closed) return; closed = true;

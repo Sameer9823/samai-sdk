@@ -2,8 +2,10 @@
 
 Everything in this SDK has already been checked with:
 - `npm run typecheck` → clean
-- `npm run build` (tsup) → all 5 entry points (index, react, vue, svelte, cli) build clean
-- `npm test` (28 mock-based example suites) → all pass
+- `npm run build` (tsup) → all 7 entry points (index, react, vue, svelte, cli, voice, react-voice) build clean
+- `npm run check:exports` → every path in `package.json` exists on disk after a build
+- `npm run check:browser` → `samai-sdk/voice` bundles for the browser with no Node built-ins reachable
+- `npm test` (39 mock-based example suites) → all pass
 
 The `demo/` folder here adds a **real, unmocked** end-to-end check: an actual Node
 backend using the built SDK against the live Anthropic API (+ Tavily for web search),
@@ -99,7 +101,8 @@ I built and tested this from a sandboxed environment whose outbound network only
 allows `api.anthropic.com` (plus package registries) — `api.openai.com` and
 `api.tavily.com` are both blocked there with `host_not_allowed`. So:
 - **Verified for real, by me, right here:** `npm run typecheck`, `npm run build`
-  (all 5 entry points), `npm test` (28 mock suites), and both `demo/server` and
+  (all 7 entry points), `npm run check:exports`, `npm run check:browser`,
+  `npm test` (39 mock suites), and both `demo/server` and
   `demo/web` typecheck + build clean.
 - **Needs you to run it, with your own keys:** the actual live network calls —
   OpenAI chat, Tavily web search, and (if you use it) Anthropic chat. The code is

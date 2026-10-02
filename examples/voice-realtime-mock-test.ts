@@ -9,7 +9,7 @@ function check(label: string, cond: boolean) {
 }
 
 console.log("=== TEST: openaiRealtime mock + pipeline-like surface ===");
-const agent = defineVoiceAgent({ name: "rt-agent", instructions: "helpful", model: "gpt-4o-realtime" });
+const agent = defineVoiceAgent({ name: "rt-agent", instructions: "helpful", model: "gpt-realtime" });
 const provider = openaiRealtime({ apiKey: "mock" });
 check("provider name is openai-realtime", provider.name === "openai-realtime");
 

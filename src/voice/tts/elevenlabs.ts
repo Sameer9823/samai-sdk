@@ -73,9 +73,11 @@ export function elevenLabsTTS(config: { apiKey?: string; voiceId?: string; model
     async connect(): Promise<TTSSession> {
       const isMock = !config.apiKey || config.apiKey === "mock";
       if (isMock) return createSession(true, null);
+      // Lazy import of the optional peer dependency. Kept behind a variable so browser bundlers
+      // don't try to resolve it statically when the app never calls elevenLabsTTS().
+      const specifier = "elevenlabs";
       let mod: any = null;
-      // @ts-ignore dynamic optional dep
-      try { mod = await import("elevenlabs"); } catch {}
+      try { mod = await import(/* webpackIgnore: true */ /* @vite-ignore */ specifier); } catch {}
       if (!mod) throw new Error("ElevenLabs SDK not installed. Install with: npm i elevenlabs. Then set apiKey in elevenLabsTTS({ apiKey }).");
       const Client = mod.ElevenLabsClient ?? mod.ElevenLabs ?? mod.default?.ElevenLabsClient ?? mod.default;
       let client: any = null;

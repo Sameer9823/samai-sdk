@@ -151,7 +151,12 @@ async function testRealtimeSession() {
 
   const sentSessionUpdate = received.find((m) => m.type === "session.update");
   check("session.update was sent on connect", !!sentSessionUpdate);
-  check("session.update carries the configured voice", sentSessionUpdate?.session?.voice === "alloy");
+  // GA shape: session.type, and all audio config nested under session.audio.{input,output}.
+  check("session.update uses the GA session type", sentSessionUpdate?.session?.type === "realtime");
+  check("session.update carries the configured voice under audio.output", sentSessionUpdate?.session?.audio?.output?.voice === "alloy");
+  check("session.update configures the GA input audio format", sentSessionUpdate?.session?.audio?.input?.format?.type === "audio/pcm" && sentSessionUpdate.session.audio.input.format.rate === 24000);
+  check("session.update enables input transcription so user transcripts arrive", !!sentSessionUpdate?.session?.audio?.input?.transcription?.model);
+  check("session.update does not send the retired OpenAI-Beta header", !received.some((m) => m.type === "session.update" && m.session?.input_audio_format));
   check("session.update carries the configured instructions", sentSessionUpdate?.session?.instructions === "You are a test assistant.");
   check(
     "session.update advertises the get_time tool with a real JSON Schema (not undefined)",
@@ -167,7 +172,8 @@ async function testRealtimeSession() {
   check("text.done event arrived", events.some((e) => e.type === "text.done" && (e as any).text === "Hello!"));
 
   const audioEvent = events.find((e) => e.type === "audio.delta") as Extract<RealtimeEvent, { type: "audio.delta" }> | undefined;
-  check("audio.delta event arrived with base64-decoded Buffer", Buffer.isBuffer(audioEvent?.audio) && audioEvent!.audio.toString() === "fake-pcm-bytes");
+  // audio bytes are a plain Uint8Array (not Node's Buffer) so the same code path runs in a browser.
+  check("audio.delta event arrived with base64-decoded bytes", audioEvent?.audio instanceof Uint8Array && Buffer.from(audioEvent.audio).toString() === "fake-pcm-bytes");
   check("audio.done event arrived", events.some((e) => e.type === "audio.done"));
 
   session.sendAudio(Buffer.from([1, 2, 3]));

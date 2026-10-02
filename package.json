@@ -1,6 +1,6 @@
 {
   "name": "samai-sdk",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "SamAI SDK is a provider-agnostic TypeScript AI SDK for building AI agents, chatbots, tool calling, RAG, MCP, streaming, voice agents, and multi-provider LLM applications using OpenAI, Claude, Gemini, Groq, Mistral, Ollama, Azure OpenAI, and AWS Bedrock.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -37,9 +37,9 @@
       "require": "./dist/voice/index.cjs"
     },
     "./react-voice": {
-      "types": "./dist/voice/react/index.d.ts",
-      "import": "./dist/voice/react/index.js",
-      "require": "./dist/voice/react/index.cjs"
+      "types": "./dist/voice/react.d.ts",
+      "import": "./dist/voice/react.js",
+      "require": "./dist/voice/react.cjs"
     }
   },
   "files": [
@@ -47,6 +47,9 @@
   ],
   "scripts": {
     "build": "tsup",
+    "check:exports": "node scripts/check-exports.mjs",
+    "check:browser": "node scripts/check-browser-safety.mjs",
+    "verify": "npm run build && npm run check:exports && npm run check:browser",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "example:basic": "tsx examples/basic.ts",
@@ -81,6 +84,7 @@
     "example:voice-session-continuity-mock-test": "tsx examples/voice-session-continuity-mock-test.ts",
     "example:voice-tracing-mock-test": "tsx examples/voice-tracing-mock-test.ts",
     "example:voice-realtime-mock-test": "tsx examples/voice-realtime-mock-test.ts",
+    "example:voice-realtime-ga-test": "tsx examples/voice-realtime-ga-test.ts",
     "example:voice-webrtc-connection-test": "tsx examples/voice-webrtc-connection-test.ts",
     "example:graph-memory-mock-test": "tsx examples/graph-memory-mock-test.ts",
     "example:graph-memory-self-correction-mock-test": "tsx examples/graph-memory-self-correction-mock-test.ts",
@@ -90,8 +94,8 @@
     "example:graph-memory-fact-lifecycle-mock-test": "tsx examples/graph-memory-fact-lifecycle-mock-test.ts",
     "example:graph-memory-metrics-mock-test": "tsx examples/graph-memory-metrics-mock-test.ts",
     "example:graph-memory-manager-mock-test": "tsx examples/graph-memory-manager-mock-test.ts",
-    "test": "npm run example:agent-runtime-mock-test && npm run example:agent-structured-output-mock-test && npm run example:reliability-mock-test && npm run example:resilience-tracing-mock-test && npm run example:session-stores-mock-test && npm run example:provider-conversion-mock-test && npm run example:rag-mock-test && npm run example:cli-mock-test && npm run example:checkpoint-resume-mock-test && npm run example:testing-utils-mock-test && npm run example:otel-export-mock-test && npm run example:trace-viewer-mock-test && npm run example:generate-object-batch-mock-test && npm run example:usage-ledger-mock-test && npm run example:vue-usage-mock-test && npm run example:svelte-usage-mock-test && npm run example:valibot-mock-test && npm run example:mcp-usage-test && npm run example:sandbox-usage-test && npm run example:voice-usage-test && npm run example:graph-memory-mock-test && npm run example:graph-memory-self-correction-mock-test && npm run example:graph-memory-self-correction-clean-mock-test && npm run example:graph-memory-feed-engine-mock-test && npm run example:graph-memory-admin-mock-test && npm run example:graph-memory-fact-lifecycle-mock-test && npm run example:graph-memory-metrics-mock-test && npm run example:graph-memory-manager-mock-test && npm run example:voice-pipeline-mock-test && npm run example:voice-interruption-mock-test && npm run example:voice-turn-taking-mock-test && npm run example:voice-goal-tracking-mock-test && npm run example:voice-clarification-mock-test && npm run example:voice-session-continuity-mock-test && npm run example:voice-tracing-mock-test && npm run example:voice-realtime-mock-test && npm run example:voice-webrtc-connection-test",
-    "prepublishOnly": "npm run build"
+    "test": "npm run example:agent-runtime-mock-test && npm run example:agent-structured-output-mock-test && npm run example:reliability-mock-test && npm run example:resilience-tracing-mock-test && npm run example:session-stores-mock-test && npm run example:provider-conversion-mock-test && npm run example:rag-mock-test && npm run example:cli-mock-test && npm run example:checkpoint-resume-mock-test && npm run example:testing-utils-mock-test && npm run example:otel-export-mock-test && npm run example:trace-viewer-mock-test && npm run example:generate-object-batch-mock-test && npm run example:usage-ledger-mock-test && npm run example:vue-usage-mock-test && npm run example:svelte-usage-mock-test && npm run example:valibot-mock-test && npm run example:mcp-usage-test && npm run example:sandbox-usage-test && npm run example:voice-usage-test && npm run example:graph-memory-mock-test && npm run example:graph-memory-self-correction-mock-test && npm run example:graph-memory-self-correction-clean-mock-test && npm run example:graph-memory-feed-engine-mock-test && npm run example:graph-memory-admin-mock-test && npm run example:graph-memory-fact-lifecycle-mock-test && npm run example:graph-memory-metrics-mock-test && npm run example:graph-memory-manager-mock-test && npm run example:voice-pipeline-mock-test && npm run example:voice-interruption-mock-test && npm run example:voice-turn-taking-mock-test && npm run example:voice-goal-tracking-mock-test && npm run example:voice-clarification-mock-test && npm run example:voice-session-continuity-mock-test && npm run example:voice-tracing-mock-test && npm run example:voice-realtime-mock-test && npm run example:voice-realtime-ga-test && npm run example:voice-webrtc-connection-test && npm run check:browser",
+    "prepublishOnly": "npm run verify"
   },
   "keywords": [
     "ai",

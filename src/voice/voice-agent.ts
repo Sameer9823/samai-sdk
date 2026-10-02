@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID } from "../uuid.js";
 import type { Session } from "../session.js";
 import { addUsage, createTrace, finishTrace, recordEvent, type RunTrace } from "../trace.js";
 import type { VoiceAgentConfig, VoiceAgentEvent, VoiceProvider, VoiceSession } from "./types.js";
@@ -80,15 +80,20 @@ export async function runVoiceAgent(
   const eventTypes: VoiceAgentEvent["type"][] = [
     "user-speech-started",
     "user-speech-ended",
+    "user-transcript-delta",
     "agent-thinking",
     "agent-speech-started",
     "agent-audio-chunk",
     "agent-speech-ended",
+    "assistant-transcript-delta",
+    "assistant-transcript-done",
+    "response-cancelled",
     "interruption",
     "tool-started",
     "tool-completed",
     "clarification-requested",
     "goal-updated",
+    "connection-state",
     "run-completed",
     "run-failed",
   ];
