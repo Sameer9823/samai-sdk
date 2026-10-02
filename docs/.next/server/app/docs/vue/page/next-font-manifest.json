@@ -1,0 +1,8 @@
+{
+  "pages": {},
+  "app": {
+    "[project]/docs/app/docs/vue/page": []
+  },
+  "appUsingSizeAdjust": true,
+  "pagesUsingSizeAdjust": false
+}

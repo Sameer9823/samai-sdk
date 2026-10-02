@@ -217,7 +217,7 @@ export default function VoicePage() {
           plumbing and no playback buffer to manage:
         </p>
         <CodeBlock code={BROWSER_CLIENT_CODE} lang="tsx" label="components/VoiceAgent.tsx" />
-        <Callout tone="tip" title="Captions, barge-in, and fallback">
+        <Callout tone="signal" title="Captions, barge-in, and fallback">
           <code>transport: &quot;webrtc&quot;</code> is implied when you pass an <code>inputStream</code>.
           Pass it explicitly to force the choice; without a client secret the transport throws rather
           than shipping a long-lived key to the browser. Turn-taking and barge-in come from

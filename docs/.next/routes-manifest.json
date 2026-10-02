@@ -1,0 +1,237 @@
+{
+  "version": 3,
+  "pages404": true,
+  "appType": "app",
+  "caseSensitive": false,
+  "basePath": "",
+  "redirects": [
+    {
+      "source": "/:path+/",
+      "destination": "/:path+",
+      "internal": true,
+      "priority": true,
+      "statusCode": 308,
+      "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"
+    }
+  ],
+  "headers": [],
+  "onMatchHeaders": [],
+  "rewrites": {
+    "beforeFiles": [],
+    "afterFiles": [],
+    "fallback": []
+  },
+  "dynamicRoutes": [],
+  "staticRoutes": [
+    {
+      "page": "/",
+      "regex": "^/(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/(?:/)?$"
+    },
+    {
+      "page": "/_global-error",
+      "regex": "^/_global\\-error(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_global\\-error(?:/)?$"
+    },
+    {
+      "page": "/_not-found",
+      "regex": "^/_not\\-found(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_not\\-found(?:/)?$"
+    },
+    {
+      "page": "/docs",
+      "regex": "^/docs(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs(?:/)?$"
+    },
+    {
+      "page": "/docs/agents",
+      "regex": "^/docs/agents(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/agents(?:/)?$"
+    },
+    {
+      "page": "/docs/api-reference",
+      "regex": "^/docs/api\\-reference(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/api\\-reference(?:/)?$"
+    },
+    {
+      "page": "/docs/batch-output",
+      "regex": "^/docs/batch\\-output(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/batch\\-output(?:/)?$"
+    },
+    {
+      "page": "/docs/cli",
+      "regex": "^/docs/cli(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/cli(?:/)?$"
+    },
+    {
+      "page": "/docs/concurrency",
+      "regex": "^/docs/concurrency(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/concurrency(?:/)?$"
+    },
+    {
+      "page": "/docs/deployment",
+      "regex": "^/docs/deployment(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/deployment(?:/)?$"
+    },
+    {
+      "page": "/docs/examples",
+      "regex": "^/docs/examples(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/examples(?:/)?$"
+    },
+    {
+      "page": "/docs/graph-memory",
+      "regex": "^/docs/graph\\-memory(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/graph\\-memory(?:/)?$"
+    },
+    {
+      "page": "/docs/guardrails",
+      "regex": "^/docs/guardrails(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/guardrails(?:/)?$"
+    },
+    {
+      "page": "/docs/installation",
+      "regex": "^/docs/installation(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/installation(?:/)?$"
+    },
+    {
+      "page": "/docs/mcp",
+      "regex": "^/docs/mcp(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/mcp(?:/)?$"
+    },
+    {
+      "page": "/docs/observability",
+      "regex": "^/docs/observability(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/observability(?:/)?$"
+    },
+    {
+      "page": "/docs/prompt-caching",
+      "regex": "^/docs/prompt\\-caching(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/prompt\\-caching(?:/)?$"
+    },
+    {
+      "page": "/docs/providers",
+      "regex": "^/docs/providers(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/providers(?:/)?$"
+    },
+    {
+      "page": "/docs/quick-start",
+      "regex": "^/docs/quick\\-start(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/quick\\-start(?:/)?$"
+    },
+    {
+      "page": "/docs/rag",
+      "regex": "^/docs/rag(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/rag(?:/)?$"
+    },
+    {
+      "page": "/docs/react",
+      "regex": "^/docs/react(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/react(?:/)?$"
+    },
+    {
+      "page": "/docs/reliability",
+      "regex": "^/docs/reliability(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/reliability(?:/)?$"
+    },
+    {
+      "page": "/docs/resumable-runs",
+      "regex": "^/docs/resumable\\-runs(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/resumable\\-runs(?:/)?$"
+    },
+    {
+      "page": "/docs/sandbox",
+      "regex": "^/docs/sandbox(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/sandbox(?:/)?$"
+    },
+    {
+      "page": "/docs/structured-output",
+      "regex": "^/docs/structured\\-output(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/structured\\-output(?:/)?$"
+    },
+    {
+      "page": "/docs/svelte",
+      "regex": "^/docs/svelte(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/svelte(?:/)?$"
+    },
+    {
+      "page": "/docs/testing",
+      "regex": "^/docs/testing(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/testing(?:/)?$"
+    },
+    {
+      "page": "/docs/tools",
+      "regex": "^/docs/tools(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/tools(?:/)?$"
+    },
+    {
+      "page": "/docs/usage-tracking",
+      "regex": "^/docs/usage\\-tracking(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/usage\\-tracking(?:/)?$"
+    },
+    {
+      "page": "/docs/voice",
+      "regex": "^/docs/voice(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/voice(?:/)?$"
+    },
+    {
+      "page": "/docs/vue",
+      "regex": "^/docs/vue(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docs/vue(?:/)?$"
+    },
+    {
+      "page": "/favicon.ico",
+      "regex": "^/favicon\\.ico(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/favicon\\.ico(?:/)?$"
+    }
+  ],
+  "dataRoutes": [],
+  "rsc": {
+    "header": "rsc",
+    "varyHeader": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+    "prefetchHeader": "next-router-prefetch",
+    "didPostponeHeader": "x-nextjs-postponed",
+    "contentTypeHeader": "text/x-component",
+    "suffix": ".rsc",
+    "prefetchSegmentHeader": "next-router-segment-prefetch",
+    "prefetchSegmentSuffix": ".segment.rsc",
+    "prefetchSegmentDirSuffix": ".segments",
+    "clientParamParsing": false,
+    "dynamicRSCPrerender": false
+  },
+  "rewriteHeaders": {
+    "pathHeader": "x-nextjs-rewritten-path",
+    "queryHeader": "x-nextjs-rewritten-query"
+  }
+}
