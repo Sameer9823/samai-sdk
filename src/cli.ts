@@ -1,7 +1,24 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
 import { mkdir, writeFile, access, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { createServer } from "node:http";
+import { fileURLToPath } from "node:url";
+
+const SDK_VERSION = (() => {
+  try {
+    return JSON.parse(readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf-8")).version as string;
+  } catch {
+    return "0.3.6";
+  }
+})();
+
+const PROVIDER_DEP: Record<ParsedArgs["provider"], { name: string; version: string }> = {
+  anthropic: { name: "@anthropic-ai/sdk", version: "^0.30.0" },
+  openai: { name: "openai", version: "^4.60.0" },
+  groq: { name: "openai", version: "^4.60.0" },
+  ollama: { name: "openai", version: "^4.60.0" },
+};
 
 interface ParsedArgs {
   command: string | undefined;
@@ -61,7 +78,13 @@ const PROVIDER_SNIPPETS: Record<ParsedArgs["provider"], { import: string; setup:
   },
 };
 
-function packageJson(target: string): string {
+function packageJson(target: string, provider: ParsedArgs["provider"]): string {
+  const dep = PROVIDER_DEP[provider];
+  const dependencies: Record<string, string> = {
+    [`samai-sdk`]: `^${SDK_VERSION}`,
+    zod: "^3.23.8",
+    [dep.name]: dep.version,
+  };
   return JSON.stringify(
     {
       name: target,
@@ -72,9 +95,7 @@ function packageJson(target: string): string {
         start: "tsx src/index.ts",
         dev: "tsx watch src/index.ts",
       },
-      dependencies: {
-        "samai-sdk": "^0.2.0",
-      },
+      dependencies,
       devDependencies: {
         tsx: "^4.19.0",
         typescript: "^5.5.4",
@@ -144,7 +165,7 @@ function readmeMd(target: string, provider: ParsedArgs["provider"]): string {
   const envStep = p.envVar ? `2. Copy \`.env.example\` to \`.env\` and add your API key\n3. ` : "2. ";
   return `# ${target}
 
-A starter agent built with [samai-sdk](https://github.com/SamAI/samai-sdk).
+A starter agent built with [samai-sdk](https://github.com/Sameer9823/samai-sdk).
 
 ## Run it
 
@@ -157,7 +178,7 @@ ${envStep}\`npm start\`
 - Swap \`${p.model}\` for any model your provider supports
 - Add more tools with \`defineTool()\`, more agents with \`defineAgent({ handoffs: [...] })\`
 
-See the [full docs](https://github.com/SamAI/samai-sdk) for guardrails, sessions, structured output, streaming, retries/fallbacks, and tracing.
+See the [full docs](https://github.com/Sameer9823/samai-sdk) for guardrails, sessions, structured output, streaming, retries/fallbacks, and tracing.
 `;
 }
 
@@ -182,7 +203,7 @@ async function runCreate(target: string, provider: ParsedArgs["provider"]): Prom
   }
 
   await mkdir(join(dir, "src"), { recursive: true });
-  await writeFile(join(dir, "package.json"), packageJson(target));
+  await writeFile(join(dir, "package.json"), packageJson(target, provider));
   await writeFile(join(dir, "tsconfig.json"), TSCONFIG);
   await writeFile(join(dir, "src", "index.ts"), indexTs(provider));
   await writeFile(join(dir, ".env.example"), envExample(provider));

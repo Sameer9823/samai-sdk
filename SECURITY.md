@@ -22,7 +22,7 @@ Instead, report it privately using one of the following:
 - **GitHub Security Advisories** (preferred): go to the
   [Security tab](https://github.com/Sameer9823/samai-sdk/security/advisories/new)
   of this repository and click "Report a vulnerability."
-- **Email**: [security contact email — replace with a real monitored address]
+- **Email**: TODO — replace with a real monitored security contact address before publishing this section.
 
 Please include:
 

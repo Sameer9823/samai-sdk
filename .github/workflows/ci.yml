@@ -33,13 +33,12 @@ jobs:
       - name: Build
         run: npm run build
 
-      # NOTE: `npm test` currently chains ~20 example scripts, some of which
-      # (session-stores, mcp, voice, sandbox) expect a live Redis instance,
-      # native SQLite bindings, or real credentials that don't exist on a
-      # clean CI runner. Blocking the badge on those isn't useful yet, so
-      # this step is temporarily allowed to fail while those examples get
-      # split into "pure logic" (safe for CI) vs "needs live services"
-      # (run manually or in a separate, service-provisioned job).
       - name: Run tests
         run: npm test
-        continue-on-error: true
+
+    # NOTE: the example tests in `npm test` are mock-based (fake providers,
+    # in-memory/fake session stores, fake browser globals) so they run on a
+    # clean CI runner with no live services or real credentials. A few tests
+    # use native modules (better-sqlite3) pulled in via devDependencies; those
+    # are installed by `npm ci` and have prebuilt binaries for the runner arch.
+
