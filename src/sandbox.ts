@@ -121,7 +121,20 @@ function spawnAndCollect(
         // Kill the whole process group (negative PID = group) to reap
         // grandchildren like `bash -c "sleep 6 & wait"`.
         // child.pid is guaranteed to be set by the time the timeout fires.
-        process.kill(-child.pid!, "SIGKILL");
+        try {
+          process.kill(-child.pid!, "SIGKILL");
+        } catch (killErr: any) {
+          if (killErr?.code === "ESRCH") {
+            // Process already exited — the "close" handler will finish the result.
+          } else {
+            // Fallback: try killing the single PID directly.
+            try {
+              child.kill("SIGKILL");
+            } catch {
+              /* process already gone — nothing more to do */
+            }
+          }
+        }
       }
     }, opts.timeoutMs);
 
