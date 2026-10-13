@@ -98,9 +98,9 @@ export function createFeedEngine(options: FeedEngineOptions): FeedEngine {
       const session = driver.session();
       try {
         await session.run(
-          `MATCH (u:User {id: $userId}), (p:Post {id: $postId})
-           MERGE (u)-[:LIKED]->(p)
-           SET p.likes = coalesce(p.likes, 0) + 1`,
+           `MATCH (u:User {id: $userId}), (p:Post {id: $postId})
+            MERGE (u)-[:LIKED]->(p)
+            ON CREATE SET p.likes = coalesce(p.likes, 0) + 1`,
           { userId, postId }
         );
       } finally {

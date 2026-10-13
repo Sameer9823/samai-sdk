@@ -31,9 +31,9 @@ check("realtime session has _trace", !!vs._trace);
 await vs.close();
 check("close does not throw", true);
 
-const p2 = openaiRealtime({});
+const p2 = openaiRealtime({ apiKey: "mock" });
 const vs2: any = await p2.connect({ agent, session: createSession("rt-2", new InMemorySessionStore()) });
-check("no-apiKey also produces mock session", typeof vs2.sendAudio === "function");
+check("no-apiKey with explicit mock produces mock session", typeof vs2.sendAudio === "function");
 await vs2.close();
 
 if (failures) { console.log(`\n\u274c ${failures} failure(s)`); process.exit(1); }

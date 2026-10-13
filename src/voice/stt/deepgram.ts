@@ -2,10 +2,15 @@ import type { STTProvider, STTSession, STTStreamOptions, STTResult } from "./typ
 import { toUint8Array } from "../../bytes.js";
 
 export function deepgramSTT(config: { apiKey?: string; model?: string } = {}): STTProvider {
+  const envKey = typeof process !== "undefined" ? process.env?.DEEPGRAM_API_KEY : undefined;
+  const resolvedKey = config.apiKey ?? envKey;
   return {
     name: "deepgram",
     async connect(options: STTStreamOptions): Promise<STTSession & { simulateTranscript?: (transcript: string, isFinal?: boolean) => void }> {
-      const isMock = !config.apiKey || config.apiKey === "mock";
+      const isMock = resolvedKey === "mock";
+      if (!resolvedKey || resolvedKey === "") {
+        throw new Error("deepgramSTT requires an API key. Pass { apiKey } or set the DEEPGRAM_API_KEY environment variable. Use apiKey: 'mock' for test mode.");
+      }
 
       if (isMock) {
         let closed = false;

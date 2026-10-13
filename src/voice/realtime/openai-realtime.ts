@@ -13,6 +13,7 @@ import { base64ToBytes, toArrayBuffer } from "../../bytes.js";
 import { toolParametersJsonSchema } from "../../schema-adapter.js";
 import { createTrace, finishTrace, type RunTrace } from "../../trace.js";
 import { randomUUID } from "../../uuid.js";
+import { executeToolCalls } from "../../tool-loop.js";
 
 /**
  * Transport used to reach OpenAI's Realtime API.
@@ -60,15 +61,21 @@ export function openaiRealtime(config: OpenAIRealtimeConfig = {}): VoiceProvider
     async connect(options: VoiceConnectOptions): Promise<VoiceSession> {
       const agent = options.agent;
 
-      // No credential configured at all → mock session, so the provider surface stays testable
-      // without a key. `apiKey: "mock"` is the explicit opt-in used by the SDK's own tests.
-      const isMockSentinel = config.apiKey === "mock" || config.clientSecret === "mock";
-      const hasCredential =
-        !isMockSentinel &&
-        !!(config.clientSecret || config.getEphemeralKey || config.apiKey || (typeof process !== "undefined" && process.env?.OPENAI_API_KEY));
-      if (!hasCredential && !config.url) {
-        return createMockVoiceSession(agent);
-      }
+       // No credential configured at all — throw instead of silently falling back to mock.
+       // `apiKey: "mock"` is the explicit opt-in for tests.
+       const isMockSentinel = config.apiKey === "mock" || config.clientSecret === "mock";
+       const hasCredential =
+         !isMockSentinel &&
+         !!(config.clientSecret || config.getEphemeralKey || config.apiKey || (typeof process !== "undefined" && process.env?.OPENAI_API_KEY));
+       if (isMockSentinel) {
+         return createMockVoiceSession(agent);
+       }
+       if (!hasCredential && !config.url) {
+         throw new Error(
+           "openaiRealtime requires an API key, client secret, or getEphemeralKey." +
+           " Set apiKey, pass config.clientSecret, or use apiKey: 'mock' for tests."
+         );
+       }
 
       const handlers = new Map<string, Set<(event: any) => void>>();
       function emit(event: VoiceAgentEvent): void {
@@ -328,13 +335,100 @@ export function openaiRealtime(config: OpenAIRealtimeConfig = {}): VoiceProvider
           case "error":
             handleRealtimeEvent({ type: "error", error: msg.error ?? msg });
             break;
+          case "response.function_call_arguments.done":
+            // Accumulate model-supplied tool call arguments, keyed by call_id.
+            handleFunctionCallDone(
+              msg.call_id as string,
+              msg.name as string,
+              msg.arguments as string
+            );
+            break;
+          case "response.output_item.done": {
+            // When the model finishes a function_call item, execute the tool and reply.
+            const item = msg.item as { type?: string; call_id?: string; name?: string };
+            if (item?.type === "function_call" && item?.call_id) {
+              const name = item.name ?? "";
+              void executePendingFunctionCall(item.call_id, name);
+            }
+            break;
+          }
           default:
             break;
         }
       }
 
-      // ── connect ─────────────────────────────────────────────────────────────
-      setConnectionState("connecting");
+       // ── connect ─────────────────────────────────────────────────────────────
+       setConnectionState("connecting");
+
+       // Track function call arguments for WebRTC data channel tool execution.
+       const pendingFunctionArgs = new Map<string, string>();
+       const seenCallIds = new Set<string>();
+
+       function handleFunctionCallDone(callId: string, name: string, args: string): void {
+         pendingFunctionArgs.set(callId, args);
+       }
+
+       async function executePendingFunctionCall(callId: string, name: string): Promise<void> {
+         if (!webrtc) return;
+         if (seenCallIds.has(callId)) return;
+         seenCallIds.add(callId);
+
+         const argsJson = pendingFunctionArgs.get(callId) ?? "{}";
+         let parsedArgs: Record<string, unknown> = {};
+         try { parsedArgs = JSON.parse(argsJson); } catch {
+           webrtc.sendQuiet({
+             type: "conversation.item.create",
+             item: { type: "function_call_output", call_id: callId, output: JSON.stringify({ error: "Invalid tool arguments JSON" }) },
+           });
+           webrtc.sendQuiet({ type: "response.create" });
+           return;
+         }
+
+         const tool = (agent.tools ?? []).find((t) => t.name === name);
+         if (!tool) {
+           webrtc.sendQuiet({
+             type: "conversation.item.create",
+             item: { type: "function_call_output", call_id: callId, output: JSON.stringify({ error: `no tool registered with name "${name}"` }), error: { code: "tool_not_found" } },
+           });
+           webrtc.sendQuiet({ type: "response.create" });
+           return;
+         }
+
+         emit({ type: "tool-started", toolName: name, args: parsedArgs });
+
+         const onApproval = options.onApprovalRequest
+           ? (info: { agentName: string; toolName: string; args: unknown }) =>
+               options.onApprovalRequest!({ toolName: info.toolName, args: info.args })
+           : undefined;
+
+         try {
+           const results = await executeToolCalls(
+             [{ type: "tool-call", toolCallId: callId, toolName: name, args: parsedArgs }],
+             agent.tools ?? [],
+             { agentName: agent.name, onApprovalRequest: onApproval as any }
+           );
+           const result = results[0];
+           emit({ type: "tool-completed", toolName: name, result: result?.result });
+           webrtc.sendQuiet({
+             type: "conversation.item.create",
+             item: {
+               type: "function_call_output",
+               call_id: callId,
+               output: typeof result?.result === "string" ? result.result : JSON.stringify(result?.result),
+               ...(result?.isError ? { error: { code: "tool_error" } } : {}),
+             },
+           });
+           webrtc.sendQuiet({ type: "response.create" });
+         } catch (err) {
+           const e = err instanceof Error ? err.message : String(err);
+           emit({ type: "tool-completed", toolName: name, result: `Error: ${e}` });
+           webrtc.sendQuiet({
+             type: "conversation.item.create",
+             item: { type: "function_call_output", call_id: callId, output: JSON.stringify({ error: e }), error: { code: "tool_error" } },
+           });
+           webrtc.sendQuiet({ type: "response.create" });
+         }
+       }
       try {
         if (webrtc) {
           const call: NegotiatedRealtimeCall = await webrtc.negotiate();
@@ -354,9 +448,15 @@ export function openaiRealtime(config: OpenAIRealtimeConfig = {}): VoiceProvider
         }
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
-        setConnectionState("failed", error.message);
-        emit({ type: "run-failed", error });
-        // Still hand back a usable session so callers can clean up symmetrically.
+        // Clean up partial state before re-throwing so callers can safely close().
+        for (const detach of detachers) {
+          try { detach(); } catch {}
+        }
+        detachers.length = 0;
+        try { socket?.close(); } catch {}
+        try { webrtc?.close(); } catch {}
+        handlers.clear();
+        throw error;
       }
 
       const session: VoiceSession = {

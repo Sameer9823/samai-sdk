@@ -5,6 +5,8 @@ type Handler<T> = (v: T) => void;
 export function elevenLabsTTS(config: { apiKey?: string; voiceId?: string; model?: string } = {}): TTSProvider {
   const voiceId = config.voiceId ?? "21m00Tcm4TlvDq8ikWAM";
   const model = config.model ?? "eleven_multilingual_v2";
+  const envKey = typeof process !== "undefined" ? process.env?.ELEVENLABS_API_KEY : undefined;
+  const resolvedKey = config.apiKey ?? envKey;
 
   async function createSession(isMock: boolean, sdkClient: any): Promise<TTSSession> {
     const chunkHandlers = new Set<Handler<ArrayBuffer>>();
@@ -71,7 +73,10 @@ export function elevenLabsTTS(config: { apiKey?: string; voiceId?: string; model
   return {
     name: "elevenlabs",
     async connect(): Promise<TTSSession> {
-      const isMock = !config.apiKey || config.apiKey === "mock";
+      const isMock = resolvedKey === "mock";
+      if (!resolvedKey || resolvedKey === "") {
+        throw new Error("elevenLabsTTS requires an API key. Pass { apiKey } or set the ELEVENLABS_API_KEY environment variable. Use apiKey: 'mock' for test mode.");
+      }
       if (isMock) return createSession(true, null);
       // Lazy import of the optional peer dependency. Kept behind a variable so browser bundlers
       // don't try to resolve it statically when the app never calls elevenLabsTTS().
@@ -81,12 +86,12 @@ export function elevenLabsTTS(config: { apiKey?: string; voiceId?: string; model
       if (!mod) throw new Error("ElevenLabs SDK not installed. Install with: npm i elevenlabs. Then set apiKey in elevenLabsTTS({ apiKey }).");
       const Client = mod.ElevenLabsClient ?? mod.ElevenLabs ?? mod.default?.ElevenLabsClient ?? mod.default;
       let client: any = null;
-      try { client = Client ? new Client({ apiKey: config.apiKey }) : mod; } catch { client = mod; }
+      try { client = Client ? new Client({ apiKey: resolvedKey }) : mod; } catch { client = mod; }
       return createSession(false, client);
     },
     async synthesize(text: string, opts?: TTSOptions): Promise<ArrayBuffer> {
       const chunks: ArrayBuffer[] = [];
-      const sess = await createSession(!config.apiKey || config.apiKey === "mock", null);
+      const sess = await createSession(resolvedKey === "mock", null);
       return new Promise((resolve, reject) => {
         sess.onAudioChunk((c) => chunks.push(c));
         sess.onDone(() => {
