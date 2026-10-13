@@ -514,6 +514,302 @@ async function testWebRtcFunctionCall() {
   }
 }
 
+async function testWebRtcFunctionCallDuplicate() {
+  console.log("=== TEST: WebRTC function_call dedupes duplicate events ===");
+  installBrowserGlobals();
+  try {
+    const { impl } = fakeSdpFetch();
+    let toolCalls = 0;
+    const agent = defineVoiceAgent({
+      name: "dup-agent",
+      instructions: "You are a voice assistant.",
+      model: "gpt-realtime",
+      tools: [
+        defineTool({
+          name: "get_time",
+          description: "Gets the current time",
+          parameters: z.object({}),
+          execute: async () => { toolCalls++; return "12:00 PM"; },
+        }),
+      ],
+    });
+
+    const provider = openaiRealtime({
+      clientSecret: "ek_browser",
+      transport: "webrtc",
+      inputStream: new FakeMediaStream() as any,
+      fetchImpl: impl,
+    });
+
+    const vs: any = await provider.connect({ agent, session: createSession("webrtc-dup", new InMemorySessionStore()) });
+    const channel = (FakeRTCPeerConnection.last as any).channel as FakeDataChannel;
+
+    // Send arguments.done, then output_item.done, then DUPLICATE output_item.done.
+    channel.emitProtocol({
+      type: "response.function_call_arguments.done",
+      call_id: "call-dup",
+      name: "get_time",
+      arguments: "{}",
+    });
+    channel.emitProtocol({
+      type: "response.output_item.done",
+      item: { type: "function_call", call_id: "call-dup", name: "get_time", arguments: "{}" },
+    });
+    channel.emitProtocol({
+      type: "response.output_item.done",
+      item: { type: "function_call", call_id: "call-dup", name: "get_time", arguments: "{}" },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    check("tool executed exactly once despite duplicate output_item.done", toolCalls === 1);
+    const outputCount = channel.sent.filter((s) =>
+      JSON.parse(s).type === "conversation.item.create" &&
+      JSON.parse(s).item?.type === "function_call_output"
+    ).length;
+    check("single function_call_output sent", outputCount === 1);
+
+    await vs.close();
+  } finally {
+    restoreBrowserGlobals();
+  }
+}
+
+async function testWebRtcFunctionCallMalformedArgs() {
+  console.log("=== TEST: WebRTC function_call handles malformed arguments JSON ===");
+  installBrowserGlobals();
+  try {
+    const { impl } = fakeSdpFetch();
+    let toolCalls = 0;
+    const agent = defineVoiceAgent({
+      name: "malformed-agent",
+      instructions: "You are a voice assistant.",
+      model: "gpt-realtime",
+      tools: [
+        defineTool({
+          name: "get_time",
+          description: "Gets the current time",
+          parameters: z.object({}),
+          execute: async () => { toolCalls++; return "12:00 PM"; },
+        }),
+      ],
+    });
+
+    const provider = openaiRealtime({
+      clientSecret: "ek_browser",
+      transport: "webrtc",
+      inputStream: new FakeMediaStream() as any,
+      fetchImpl: impl,
+    });
+
+    const vs: any = await provider.connect({ agent, session: createSession("webrtc-mal", new InMemorySessionStore()) });
+    const channel = (FakeRTCPeerConnection.last as any).channel as FakeDataChannel;
+
+    // Malformed arguments JSON — should not throw, should send error output.
+    channel.emitProtocol({
+      type: "response.output_item.done",
+      item: {
+        type: "function_call",
+        call_id: "call-mal",
+        name: "get_time",
+        arguments: "{not json",
+      },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    check("no uncaught error from malformed args", true);
+    check("tool was NOT executed (bad JSON)", toolCalls === 0);
+
+    const sent = channel.sent.map((s) => JSON.parse(s));
+    const outputMsg = sent.find((m) => m.type === "conversation.item.create" && m.item?.type === "function_call_output");
+    check("error function_call_output sent", !!outputMsg);
+    check("output indicates invalid JSON", outputMsg?.item?.output?.includes("Invalid tool arguments JSON"));
+
+    const responseCreate = sent.find((m) => m.type === "response.create");
+    check("response.create sent after error output", !!responseCreate);
+
+    await vs.close();
+  } catch (err) {
+    check("malformed args test threw (should not)", false);
+  } finally {
+    restoreBrowserGlobals();
+  }
+}
+
+async function testWebRtcFunctionCallUnknownTool() {
+  console.log("=== TEST: WebRTC function_call with unknown tool name ===");
+  installBrowserGlobals();
+  try {
+    const { impl } = fakeSdpFetch();
+    const agent = defineVoiceAgent({
+      name: "unknown-agent",
+      instructions: "You are a voice assistant.",
+      model: "gpt-realtime",
+      tools: [
+        defineTool({
+          name: "get_time",
+          description: "Gets the current time",
+          parameters: z.object({}),
+          execute: async () => "12:00 PM",
+        }),
+      ],
+    });
+
+    const provider = openaiRealtime({
+      clientSecret: "ek_browser",
+      transport: "webrtc",
+      inputStream: new FakeMediaStream() as any,
+      fetchImpl: impl,
+    });
+
+    const vs: any = await provider.connect({ agent, session: createSession("webrtc-unk", new InMemorySessionStore()) });
+    const channel = (FakeRTCPeerConnection.last as any).channel as FakeDataChannel;
+
+    channel.emitProtocol({
+      type: "response.output_item.done",
+      item: {
+        type: "function_call",
+        call_id: "call-unk",
+        name: "nonexistent_tool",
+        arguments: "{}",
+      },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    const sent = channel.sent.map((s) => JSON.parse(s));
+    const outputMsg = sent.find((m) => m.type === "conversation.item.create" && m.item?.type === "function_call_output");
+    check("error function_call_output sent for unknown tool", !!outputMsg);
+    check("output indicates tool not found", outputMsg?.item?.error?.code === "tool_not_found");
+
+    const responseCreate = sent.find((m) => m.type === "response.create");
+    check("response.create sent after error output", !!responseCreate);
+
+    await vs.close();
+  } finally {
+    restoreBrowserGlobals();
+  }
+}
+
+async function testWebRtcFunctionCallApprovalFailClosed() {
+  console.log("=== TEST: WebRTC function_call fails closed without approval handler ===");
+  installBrowserGlobals();
+  try {
+    const { impl } = fakeSdpFetch();
+    let toolCalls = 0;
+    const agent = defineVoiceAgent({
+      name: "approval-agent",
+      instructions: "You are a voice assistant.",
+      model: "gpt-realtime",
+      tools: [
+        defineTool({
+          name: "delete_account",
+          description: "Deletes the user's account",
+          parameters: z.object({}),
+          execute: async () => { toolCalls++; return "deleted"; },
+          requiresApproval: true,
+        }),
+      ],
+    });
+
+    // No onApprovalRequest passed — should fail closed.
+    const provider = openaiRealtime({
+      clientSecret: "ek_browser",
+      transport: "webrtc",
+      inputStream: new FakeMediaStream() as any,
+      fetchImpl: impl,
+    });
+
+    const vs: any = await provider.connect({ agent, session: createSession("webrtc-apr", new InMemorySessionStore()) });
+    const channel = (FakeRTCPeerConnection.last as any).channel as FakeDataChannel;
+
+    channel.emitProtocol({
+      type: "response.output_item.done",
+      item: {
+        type: "function_call",
+        call_id: "call-apr",
+        name: "delete_account",
+        arguments: "{}",
+      },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    check("tool was NOT executed (fail closed)", toolCalls === 0);
+    const sent = channel.sent.map((s) => JSON.parse(s));
+    const outputMsg = sent.find((m) => m.type === "conversation.item.create" && m.item?.type === "function_call_output");
+    check("error function_call_output sent", !!outputMsg);
+    check("output indicates approval required", outputMsg?.item?.output?.includes("approval"));
+
+    const responseCreate = sent.find((m) => m.type === "response.create");
+    check("response.create sent after error output", !!responseCreate);
+
+    await vs.close();
+  } finally {
+    restoreBrowserGlobals();
+  }
+}
+
+async function testWebRtcFunctionCallArgsFromOutputItem() {
+  console.log("=== TEST: WebRTC function_call receives args from output_item.done (no arguments.done) ===");
+  installBrowserGlobals();
+  try {
+    const { impl } = fakeSdpFetch();
+    const receivedArgs: any[] = [];
+    const agent = defineVoiceAgent({
+      name: "args-agent",
+      instructions: "You are a voice assistant.",
+      model: "gpt-realtime",
+      tools: [
+        defineTool({
+          name: "set_reminder",
+          description: "Set a reminder",
+          parameters: z.object({ text: z.string(), when: z.string() }),
+          execute: async (args: { text: string; when: string }) => {
+            receivedArgs.push(args);
+            return "reminder set";
+          },
+        }),
+      ],
+    });
+
+    const provider = openaiRealtime({
+      clientSecret: "ek_browser",
+      transport: "webrtc",
+      inputStream: new FakeMediaStream() as any,
+      fetchImpl: impl,
+    });
+
+    const vs: any = await provider.connect({ agent, session: createSession("webrtc-arg", new InMemorySessionStore()) });
+    const channel = (FakeRTCPeerConnection.last as any).channel as FakeDataChannel;
+
+    // NOTE: no "response.function_call_arguments.done" is sent before output_item.done.
+    channel.emitProtocol({
+      type: "response.output_item.done",
+      item: {
+        type: "function_call",
+        call_id: "call-arg",
+        name: "set_reminder",
+        arguments: JSON.stringify({ text: "buy milk", when: "tomorrow" }),
+      },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    check("tool executed once", receivedArgs.length === 1);
+    check("tool received real args (not empty)", receivedArgs[0]?.text === "buy milk" && receivedArgs[0]?.when === "tomorrow");
+
+    const sent = channel.sent.map((s) => JSON.parse(s));
+    const outputMsg = sent.find((m) => m.type === "conversation.item.create" && m.item?.type === "function_call_output");
+    check("function_call_output sent with result", !!outputMsg && outputMsg?.item?.output?.includes("reminder set"));
+
+    await vs.close();
+  } finally {
+    restoreBrowserGlobals();
+  }
+}
+
 async function testWebRtcMisconfiguration() {
   console.log("=== TEST: openaiRealtime() guards its WebRTC configuration ===");
 
@@ -607,6 +903,11 @@ async function main() {
   await testWebRtcTransportErrors();
   await testOpenAIRealtimeOverWebRtc();
   await testWebRtcFunctionCall();
+  await testWebRtcFunctionCallDuplicate();
+  await testWebRtcFunctionCallMalformedArgs();
+  await testWebRtcFunctionCallUnknownTool();
+  await testWebRtcFunctionCallApprovalFailClosed();
+  await testWebRtcFunctionCallArgsFromOutputItem();
   await testWebRtcMisconfiguration();
   testVoiceEntryExports();
 
