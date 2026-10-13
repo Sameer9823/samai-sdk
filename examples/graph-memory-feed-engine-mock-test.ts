@@ -1,6 +1,7 @@
 import { createFeedEngine } from "../src/index.js";
 
 const queriesRun: { query: string; params: Record<string, unknown> }[] = [];
+let feedQuery = "";
 
 // Fake driver that behaves like a real Neo4j instance FOR THE SPECIFIC SHAPE
 // OF DATA THIS TEST PLANTS — it doesn't reimplement Cypher, it hand-computes
@@ -19,6 +20,7 @@ function computeExpectedScore(p: typeof fakePosts[number], w: { social: number; 
 class FakeSession {
   async run(query: string, params: Record<string, unknown>) {
     if (query.includes("ORDER BY score DESC")) {
+      feedQuery = query;
       const w = {
         social: params.socialWeight as number,
         interest: params.interestWeight as number,
@@ -27,13 +29,13 @@ class FakeSession {
       const ranked = [...fakePosts]
         .map((p) => ({ ...p, score: computeExpectedScore(p, w) }))
         .sort((a, b) => b.score - a.score);
-      return {
-        records: ranked.map((p) => ({
-          get: (k: string) => (p as any)[k],
-        })),
-      };
-    }
-    // write operations (recordLike, recordFollow, upsertPost)
+       return {
+          records: ranked.map((p) => ({
+            get: (k: string) => (p as any)[k],
+          })),
+        };
+      }
+      // write operations (recordLike, recordFollow, upsertPost)
     queriesRun.push({ query, params });
     return { records: [] };
   }
@@ -48,11 +50,19 @@ async function main() {
   const feed = createFeedEngine({ driverPromise: Promise.resolve(new FakeDriver() as any) });
 
   const results = await feed.getFeed({ userId: "user-123", limit: 10 });
+
+  // Phase 1: with a driver that has NO `int` method, the feed query must use
+  // toInteger($limit) instead of relying on driver.int.
+  if (!feedQuery.includes("LIMIT toInteger($limit)")) {
+    throw new Error("feed query must use LIMIT toInteger($limit), not bare LIMIT $limit");
+  }
+  if (feedQuery.includes("LIMIT $limit")) {
+    throw new Error("feed query must not use bare LIMIT $limit");
+  }
+  console.log("LIMIT clause check passed: toInteger($limit)");
+
   console.log("ranked feed:", results);
 
-  // post-B has strong social+interest signal despite fewer likes than post-A
-  // (pure virality) or post-C (irrelevant niche) — this is the actual point
-  // of the hybrid model: it should NOT just be sorted by raw like count.
   if (results[0].postId !== "post-B") {
     throw new Error(`expected post-B (social+interest match) to rank first, got ${results[0].postId}`);
   }

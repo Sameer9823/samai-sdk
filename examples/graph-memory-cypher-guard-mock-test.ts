@@ -202,20 +202,47 @@ async function testReadUserFactsReturnsElementId() {
   await mem.stop();
 }
 
-// ── Phase 2.3: LIMIT parameter is integer-typed ──
-async function testLimitIsInteger() {
-  console.log("=== TEST: LIMIT parameter is driver.integer-typed ===");
+// ── Phase 1: LIMIT/SKIP use toInteger($param), no driver.int dependency ──
+async function testLimitToInteger() {
+  console.log("=== TEST: LIMIT uses toInteger($limit), works without driver.int ===");
   queriesRun.length = 0;
-  const intImpl = (n: number) => ({ __isInt: true, value: n });
-  const driver = new FakeDriver(intImpl);
-  const mem = buildMemory(driver, false);
+
+  // Driver with NO `int` method — simulates a user-supplied neo4j-driver instance.
+  class DriverWithoutInt {
+    session() { return new FakeSession(); }
+    async close() {}
+  }
+
+  const mem = buildMemory(new DriverWithoutInt() as any, false);
   const read = mem.tools.find((t) => t.name === "read_user_facts")!;
 
   await read.execute({ relationType: "LIKES" });
-  const limitParam = queriesRun[0].params.limit;
-  check("limit param is integer-typed (has __isInt)", typeof limitParam === "object" && limitParam !== null && (limitParam as any).__isInt === true, "got: " + typeof limitParam);
+  // Only one query should have run (read_user_facts).
+  const q = queriesRun.find((r) => r.query.includes("RETURN"));
+  check("exactly one query ran", queriesRun.length === 1);
+  check("Cypher uses toInteger($limit)", q!.query.includes("LIMIT toInteger($limit)"));
+  check("Cypher does NOT use bare LIMIT $limit", !q!.query.includes("LIMIT $limit"));
+  check("limit param is a plain number", typeof q!.params.limit === "number");
+  check("limit param has no __isInt wrapper", !(q!.params.limit as any)?.__isInt);
 
   await mem.stop();
+}
+
+// ── Phase 1: grep-style assertion — no bare LIMIT $ or SKIP $ in src/graph-memory/ ──
+async function testNoBareLimitSkip() {
+  console.log("=== TEST: no bare LIMIT $ or SKIP $ in graph-memory source ===");
+  const fs = await import("node:fs");
+  const dir = "src/graph-memory";
+  const files = fs.readdirSync(dir).filter((f: string) => f.endsWith(".ts"));
+  const violations: string[] = [];
+  for (const file of files) {
+    const content = fs.readFileSync(`${dir}/${file}`, "utf8");
+    const bareLimit = /LIMIT \$/g.exec(content);
+    const bareSkip = /SKIP \$/g.exec(content);
+    if (bareLimit) violations.push(`${file}: bare 'LIMIT $'`);
+    if (bareSkip) violations.push(`${file}: bare 'SKIP $'`);
+  }
+  check("no bare LIMIT $limit or SKIP $skip in src/graph-memory/", violations.length === 0, violations.length ? violations.join(", ") : "");
 }
 
 // ── Phase 2.4: rename_relationship Cypher ──
@@ -251,8 +278,9 @@ async function main() {
   await testMergeDuplicateNodesOwnerCheck(); // 1.3
   await testElementIdRegex();                // 2.1
   await testReadUserFactsReturnsElementId(); // 2.2
-  await testLimitIsInteger();                // 2.3
-  await testRenameRelationshipCypher();     // 2.4
+  await testLimitToInteger();                 // 1 (limit)
+  await testNoBareLimitSkip();                // 1 (grep)
+  await testRenameRelationshipCypher();       // 2.4
 
   if (failures) {
     console.log(`\n❌ ${failures} failure(s)`);

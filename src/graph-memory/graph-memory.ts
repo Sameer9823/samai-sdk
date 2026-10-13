@@ -24,7 +24,7 @@ export type Neo4jSessionMode = "READ" | "WRITE" | undefined;
 export interface Neo4jSessionOptions { defaultAccessMode?: Neo4jSessionMode }
 export interface Neo4jDriver {
   session(options?: Neo4jSessionOptions): Neo4jSession;
-  /** Converts a JS number to the driver's Integer type for LIMIT/SKIP params. */
+  /** Converts a JS number to the driver's Integer type (kept for backwards-compat). */
   int?: (n: number) => unknown;
   close(): Promise<void>;
 }
@@ -171,7 +171,7 @@ function createReadUserFactsTool(driverPromise: Promise<Neo4jDriver>, userId: st
                     RETURN type(r) AS relationType, o.name AS objectName, labels(o) AS labels,
                            elementId(r) AS relElementId
                     ORDER BY r.updatedAt DESC`;
-        const params: Record<string, unknown> = { userId, limit: driver.int ? driver.int(cappedLimit) : cappedLimit };
+        const params: Record<string, unknown> = { userId, limit: cappedLimit };
 
         if (relationType) {
           query = query.replace(
@@ -186,7 +186,7 @@ function createReadUserFactsTool(driverPromise: Promise<Neo4jDriver>, userId: st
           );
           params.objectName = objectName;
         }
-        query += " LIMIT $limit";
+        query += " LIMIT toInteger($limit)";
 
         const result = await s.run(query, params);
         return result.records.map((r) => r.toObject());

@@ -76,8 +76,8 @@ export function createFeedEngine(options: FeedEngineOptions): FeedEngine {
            RETURN p.id AS postId, p.niche AS niche, coalesce(p.likes, 0) AS likes,
                   socialSignal, interestSignal, score
            ORDER BY score DESC
-           LIMIT $limit`,
-           { userId, socialWeight, interestWeight, engagementWeight, limit: typeof driver.int === "function" ? driver.int(limit) : limit }
+            LIMIT toInteger($limit)`,
+            { userId, socialWeight, interestWeight, engagementWeight, limit }
         );
         return result.records.map((r) => ({
           postId: String(r.get("postId")),
@@ -159,8 +159,8 @@ export function createFeedEngine(options: FeedEngineOptions): FeedEngine {
   };
 }
 
-// LIMIT/SKIP params use the driver's `int()` (see createFeedEngine.getFeed)
-// so Neo4j receives an Integer, not a float.
+// LIMIT/SKIP params are converted inside Cypher via toInteger($limit) so they
+// work regardless of whether the driver instance exposes an `int()` helper.
 function toNum(v: unknown): number {
   if (v && typeof v === "object" && "toNumber" in (v as any)) return (v as any).toNumber();
   return typeof v === "number" ? v : Number(v);
