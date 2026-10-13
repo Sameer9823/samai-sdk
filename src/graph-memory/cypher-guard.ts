@@ -15,20 +15,9 @@
  *      level — a per-user database, or per-user Neo4j roles — never by hoping
  *      a regex catches everything.
  *
- * For the opt-in path, this module:
- *   - Walks the query once in a single-pass tokenizer that tracks string,
- *     comment, and backtick-identifier state — a `//` inside a string is NOT
- *     mistaken for a line comment (the old two-pass regex approach had this bug)
- *   - Produces a code-only string with all string/comment content neutralised
- *   - Requires `$userId` to appear in the code-only output
- *   - Rejects CREATE, MERGE, SET, DELETE, REMOVE, DROP, CALL, LOAD, FOREACH,
- *     and apoc.* — the session also runs READ-only, so this is defence-in-depth
- *   - Verifies every :User node pattern is anchored with {id: $userId} and
- *     requires at least one such anchor
- *
- * READ access mode on the session is the real backstop; this guard is best-effort.
+ * READ access mode on the session is the real backstop; this guard is best-effort
+ * and cannot replace database-level tenant isolation.
  */
-
 const MUTATION_KEYWORDS = [
   /\bCREATE\b/i,
   /\bMERGE\b/i,
@@ -201,6 +190,135 @@ function assertUserAnchored(codeOnly: string): void {
 }
 
 /**
+ * Splits a string by a top-level delimiter, ignoring delimiters inside (), [], {}.
+ */
+function splitTopLevel(s: string, delim: string): string[] {
+  const result: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") depth--;
+    if (depth === 0 && s.slice(i, i + delim.length) === delim) {
+      result.push(current);
+      current = "";
+      i += delim.length - 1;
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) result.push(current);
+  return result;
+}
+
+/**
+ * Extracts the first (...) group from a pattern string.
+ */
+function extractFirstNode(pattern: string): string | null {
+  const idx = pattern.indexOf("(");
+  if (idx === -1) return null;
+  let depth = 0;
+  let start = -1;
+  for (let i = idx; i < pattern.length; i++) {
+    const ch = pattern[i];
+    if (ch === "(") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === ")") {
+      depth--;
+      if (depth === 0) return pattern.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+/**
+ * Checks if a node pattern is an anchored user node: `(var:User {id: $userId})`.
+ */
+function isAnchoredUserNode(nodeText: string): boolean {
+  return /:User/i.test(nodeText) && /id\s*:\s*\$userId/.test(nodeText);
+}
+
+/**
+ * Extracts the leading variable name from a node pattern like `(u:User {props})` or `(u)`.
+ */
+function extractVarName(nodeText: string): string | null {
+  const inner = nodeText.slice(1, -1).trim();
+  if (!inner) return null;
+  const m = /^([a-zA-Z_][a-zA-Z0-9_]*)/.exec(inner);
+  return m ? m[1] : null;
+}
+
+/**
+ * Best-effort check: every MATCH / OPTIONAL MATCH pattern must start from an
+ * anchored user node `(u:User {id: $userId})` or a variable that was bound
+ * to such a node in a prior clause and carried through any WITH.
+ *
+ * Rejects cross-tenant reads like:
+ *   MATCH (u:User {id:$userId}) MATCH (o) RETURN o
+ *   MATCH (u:User {id:$userId}), (o) RETURN o
+ *   OPTIONAL MATCH (o) RETURN o
+ *   MATCH (u:User {id:$userId}) WITH u MATCH (o) RETURN o
+ *
+ * Accepts path expansion from the anchor:
+ *   MATCH (u:User {id:$userId})-[r]->(o) RETURN o        — single anchored pattern
+ *   ... OPTIONAL MATCH (u)-[r]->(o) RETURN o             — extends from bound var
+ *
+ * This is a heuristic. Database-level isolation is required for real safety.
+ */
+function assertAllMatchesAnchored(codeOnly: string): void {
+  const anchoredVars = new Set<string>();
+  const matchRe = /\b(?:OPTIONAL\s+)?MATCH\s+\(/gi;
+  let cursor = 0;
+  let matchResult: RegExpExecArray | null;
+
+  while ((matchResult = matchRe.exec(codeOnly)) !== null) {
+    // Text between the previous MATCH and this one — may contain WITH.
+    const beforeMatch = codeOnly.slice(cursor, matchResult.index);
+    cursor = matchRe.lastIndex;
+
+    // Parse WITH clauses to track which anchored vars survive.
+    const withRe = /\bWITH\s+(.+?)(?=\b(?:MATCH|OPTIONAL\s+MATCH|RETURN|ORDER|LIMIT|WHERE|UNLOAD|INTO|FROM|UNION)\b|$)/gi;
+    let withResult: RegExpExecArray | null;
+    while ((withResult = withRe.exec(beforeMatch)) !== null) {
+      const withVars = [...withResult[1].matchAll(/[a-zA-Z_][a-zA-Z0-9_]*/g)].map((m) => m[0]);
+      for (const v of [...anchoredVars]) {
+        if (!withVars.includes(v)) anchoredVars.delete(v);
+      }
+    }
+
+    // Extract the pattern text: from the opening ( to the next clause keyword.
+    const patternText = codeOnly.slice(matchRe.lastIndex - 1);
+    const endMatch = /\b(?:WHERE|WITH|RETURN|ORDER|LIMIT|UNLOAD|INTO|FROM|UNION|OPTIONAL\s+MATCH|MATCH)\b/gi.exec(patternText);
+    const patternsStr = endMatch ? patternText.slice(0, endMatch.index) : patternText;
+
+    // Split by top-level commas into individual patterns.
+    const patterns = splitTopLevel(patternsStr, ",");
+
+    for (const pattern of patterns) {
+      const firstNode = extractFirstNode(pattern.trim());
+      if (!firstNode) continue;
+
+      if (isAnchoredUserNode(firstNode)) {
+        const varName = extractVarName(firstNode);
+        if (varName) anchoredVars.add(varName);
+      } else {
+        const varName = extractVarName(firstNode);
+        if (varName && anchoredVars.has(varName)) {
+          // OK — starts from a bound anchored variable.
+        } else {
+          throw new Error(
+            "unsafeRawCypher: every MATCH pattern must start from an anchored " +
+            "(u:User {id: $userId}) node or a variable bound to one."
+          );
+        }
+      }
+    }
+  }
+}
+
+/**
  * Best-effort guard for raw Cypher queries.
  *
  * Runs a single-pass tokenizer to produce a code-only string (strings and
@@ -228,4 +346,5 @@ export function assertSafeRawCypher(query: string): void {
   }
 
   assertUserAnchored(codeOnly);
+  assertAllMatchesAnchored(codeOnly);
 }

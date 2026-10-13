@@ -103,6 +103,11 @@ async function testRawCypherGuard() {
     ["DELETE after comment strip", "MATCH (n) DETACH DELETE n // :User $userId"],
     ["cross-user read via extra MATCH", "MATCH (u:User {id:$userId}) MATCH (o:User) RETURN o"],
     ["hardcoded victim id", "MATCH (v:User {id:'victim'}) RETURN v, $userId"],
+    ["second MATCH with unanchored node", "MATCH (u:User {id:$userId}) MATCH (o) RETURN o"],
+    ["second MATCH with labels() bypass", "MATCH (u:User {id:$userId}) MATCH (o) WHERE 'User' IN labels(o) RETURN o"],
+    ["comma-separated unanchored pattern", "MATCH (u:User {id:$userId}), (o) RETURN o"],
+    ["OPTIONAL MATCH unanchored", "OPTIONAL MATCH (o) RETURN o"],
+    ["WITH u then MATCH (o)", "MATCH (u:User {id:$userId}) WITH u MATCH (o) RETURN o"],
   ];
 
   for (const [label, query] of mustReject) {
@@ -127,6 +132,26 @@ async function testRawCypherGuard() {
     acceptErr = (err as Error).message;
   }
   check("accepted: anchored READ query", accepted, acceptErr);
+
+  // Accept: OPTIONAL MATCH that extends from the anchored var.
+  accepted = true;
+  try {
+    assertSafeRawCypher("MATCH (u:User {id:$userId}) OPTIONAL MATCH (u)-[r]->(o) RETURN o");
+  } catch (err) {
+    accepted = false;
+    acceptErr = (err as Error).message;
+  }
+  check("accepted: OPTIONAL MATCH from anchored var", accepted, acceptErr);
+
+  // Accept: path expansion from anchored user node.
+  accepted = true;
+  try {
+    assertSafeRawCypher("MATCH (u:User {id:$userId})-[:LIKES]->(o)<-[:LIKES]-(other) RETURN o.name");
+  } catch (err) {
+    accepted = false;
+    acceptErr = (err as Error).message;
+  }
+  check("accepted: multi-hop path from anchored node", accepted, acceptErr);
 
   // Verify the raw tool session uses READ access mode.
   console.log("=== TEST: execute_cypher_query opens READ-only session ===");
