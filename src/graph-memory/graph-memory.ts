@@ -2,7 +2,7 @@ import { defineTool, type ToolDefinition } from "../types.js";
 import { defineAgent } from "../agent.js";
 import { runAgent } from "../run.js";
 import { z } from "zod";
-import { createUpsertFactTool } from "./fact-lifecycle.js";
+import { createUpsertFactTool, assertSafeRelation, ELEMENT_ID_RE } from "./fact-lifecycle.js";
 import { assertSafeRawCypher } from "./cypher-guard.js";
 import type { MetricsCollector } from "./metrics.js";
 
@@ -20,8 +20,12 @@ export interface Neo4jRecord {
   get(key: string): unknown;
   toObject(): Record<string, unknown>;
 }
+export type Neo4jSessionMode = "READ" | "WRITE" | undefined;
+export interface Neo4jSessionOptions { defaultAccessMode?: Neo4jSessionMode }
 export interface Neo4jDriver {
-  session(): Neo4jSession;
+  session(options?: Neo4jSessionOptions): Neo4jSession;
+  /** Converts a JS number to the driver's Integer type for LIMIT/SKIP params. */
+  int?: (n: number) => unknown;
   close(): Promise<void>;
 }
 
@@ -31,10 +35,7 @@ export interface Neo4jDriver {
  * same pattern RedisSessionStore uses for ioredis.
  */
 export async function loadNeo4jDriver(creds: Neo4jCreds): Promise<Neo4jDriver> {
-  let neo4j: {
-    driver: (uri: string, auth: unknown) => Neo4jDriver;
-    auth: { basic: (u: string, p: string) => unknown };
-  };
+  let neo4j: any;
   try {
     ({ default: neo4j } = await import("neo4j-driver"));
   } catch (err) {
@@ -43,7 +44,9 @@ export async function loadNeo4jDriver(creds: Neo4jCreds): Promise<Neo4jDriver> {
       { cause: err }
     );
   }
-  return neo4j.driver(creds.uri, neo4j.auth.basic(creds.username, creds.password));
+  const driver = neo4j.driver(creds.uri, neo4j.auth.basic(creds.username, creds.password));
+  (driver as any).int = neo4j.int;
+  return driver;
 }
 
 /**
@@ -142,6 +145,7 @@ function createReadUserFactsTool(driverPromise: Promise<Neo4jDriver>, userId: st
     ].join("\n"),
     parameters: z.object({
       relationType: z.string()
+        .regex(/^[A-Z][A-Z0-9_]{0,63}$/)
         .optional()
         .describe("If given, only read relationships of this exact type (e.g. LIKES, WORKS_AT)."),
       objectName: z.string()
@@ -159,10 +163,15 @@ function createReadUserFactsTool(driverPromise: Promise<Neo4jDriver>, userId: st
       try {
         const cappedLimit = Math.min(limit, 50);
 
+        if (relationType) {
+          assertSafeRelation(relationType, "relationType");
+        }
+
         let query = `MATCH (u:User {id: $userId})-[r]->(o)
-                    RETURN type(r) AS relationType, o.name AS objectName, labels(o) AS labels
+                    RETURN type(r) AS relationType, o.name AS objectName, labels(o) AS labels,
+                           elementId(r) AS relElementId
                     ORDER BY r.updatedAt DESC`;
-        const params: Record<string, unknown> = { userId, limit: cappedLimit };
+        const params: Record<string, unknown> = { userId, limit: driver.int ? driver.int(cappedLimit) : cappedLimit };
 
         if (relationType) {
           query = query.replace(
@@ -200,7 +209,7 @@ function createDeleteUserFactTool(driverPromise: Promise<Neo4jDriver>, userId: s
       relElementId: z.string().describe("The element ID of the relationship to delete (from read_user_facts)."),
     }),
     execute: async ({ relElementId }: { relElementId: string }) => {
-      if (!relElementId || typeof relElementId !== "string" || !/^_[a-zA-Z0-9]+$/.test(relElementId)) {
+      if (!relElementId || typeof relElementId !== "string" || !ELEMENT_ID_RE.test(relElementId)) {
         throw new Error(`delete_user_fact: invalid relElementId "${relElementId}"`);
       }
       const driver = await driverPromise;
@@ -237,7 +246,7 @@ function createExecuteCypherTool(driverPromise: Promise<Neo4jDriver>, userId: st
     execute: async ({ query, params }: { query: string; params?: Record<string, unknown> }) => {
       assertSafeRawCypher(query);
       const driver = await driverPromise;
-      const s = driver.session();
+      const s = driver.session({ defaultAccessMode: "READ" });
       try {
         const result = await s.run(query, { ...(params ?? {}), userId });
         return result.records.map((r) => r.toObject());

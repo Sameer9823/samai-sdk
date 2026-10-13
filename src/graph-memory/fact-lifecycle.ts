@@ -21,6 +21,13 @@ import type { MetricsCollector } from "./metrics.js";
  * interpolated into the query string — this is the injection-safety boundary.
  */
 
+/**
+ * Neo4j 5 element IDs look like `5:0f5a7c1e-1111-4222-8333-444455556666:12`.
+ * Legacy numeric IDs are plain integers like `123`. Both are accepted;
+ * anything else (e.g. the old internal `_abc` form, or SQL injection payloads) is rejected.
+ */
+export const ELEMENT_ID_RE = /^\d+:[0-9a-fA-F-]{36}:\d+$|^\d+$/;
+
 const RELATION_PATTERN = /^[A-Z][A-Z0-9_]{0,63}$/;
 const LABEL_PATTERN = /^[A-Z][A-Za-z0-9]{0,63}$/;
 

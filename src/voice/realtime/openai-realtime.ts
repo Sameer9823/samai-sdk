@@ -343,12 +343,12 @@ export function openaiRealtime(config: OpenAIRealtimeConfig = {}): VoiceProvider
               msg.arguments as string
             );
             break;
-          case "response.output_item.done": {
+           case "response.output_item.done": {
             // When the model finishes a function_call item, execute the tool and reply.
-            const item = msg.item as { type?: string; call_id?: string; name?: string };
+            const item = msg.item as { type?: string; call_id?: string; name?: string; arguments?: string };
             if (item?.type === "function_call" && item?.call_id) {
               const name = item.name ?? "";
-              void executePendingFunctionCall(item.call_id, name);
+              void executePendingFunctionCall(item.call_id, name, item.arguments);
             }
             break;
           }
@@ -368,12 +368,12 @@ export function openaiRealtime(config: OpenAIRealtimeConfig = {}): VoiceProvider
          pendingFunctionArgs.set(callId, args);
        }
 
-       async function executePendingFunctionCall(callId: string, name: string): Promise<void> {
-         if (!webrtc) return;
-         if (seenCallIds.has(callId)) return;
-         seenCallIds.add(callId);
+        async function executePendingFunctionCall(callId: string, name: string, fallbackArgs?: string): Promise<void> {
+          if (!webrtc) return;
+          if (seenCallIds.has(callId)) return;
+          seenCallIds.add(callId);
 
-         const argsJson = pendingFunctionArgs.get(callId) ?? "{}";
+          const argsJson = pendingFunctionArgs.get(callId) ?? fallbackArgs ?? "{}";
          let parsedArgs: Record<string, unknown> = {};
          try { parsedArgs = JSON.parse(argsJson); } catch {
            webrtc.sendQuiet({

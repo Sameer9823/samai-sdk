@@ -2,7 +2,7 @@ import { defineTool } from "../types.js";
 import { defineAgent } from "../agent.js";
 import { runAgent } from "../run.js";
 import { z } from "zod";
-import { assertSafeRelation } from "./fact-lifecycle.js";
+import { assertSafeRelation, ELEMENT_ID_RE } from "./fact-lifecycle.js";
 import type { GraphMemory, Neo4jDriver } from "./graph-memory.js";
 import type { MetricsCollector } from "./metrics.js";
 
@@ -30,15 +30,13 @@ export interface SelfCorrectionReport {
 
 const DEFAULT_GENERIC_TYPES = ["RELATED_TO", "CONNECTED_TO", "LINKED_TO", "ASSOCIATED_WITH"];
 
-const REL_ELEMENT_ID_PATTERN = /^_[a-zA-Z0-9]+$/;
-
 /**
  * Curator tool: merge duplicate nodes for a given label+name.
  * Finds duplicate nodes reachable from THIS user's node only, picks the one
  * with the most relationships as canonical, rewires others' edges onto it,
  * then deletes the duplicates. Cannot touch nodes another user reaches.
  */
-function createMergeDuplicateNodesTool(driverPromise: Promise<Neo4jDriver>, userId: string) {
+export function createMergeDuplicateNodesTool(driverPromise: Promise<Neo4jDriver>, userId: string) {
   return defineTool({
     name: "merge_duplicate_nodes",
     description: [
@@ -59,7 +57,9 @@ function createMergeDuplicateNodesTool(driverPromise: Promise<Neo4jDriver>, user
       const s = driver.session();
       try {
         await s.run(
-          `MATCH (u:User {id: $userId})-[:ALIAS]->(b:${label} {name: $name}) DETACH DELETE b`,
+          `MATCH (u:User {id: $userId})-[r]->(b:${label} {name: $name, ownerId: $userId})
+           WHERE NOT EXISTS { MATCH (other:User)-[*1..2]-(b) WHERE other.id <> $userId }
+           DETACH DELETE b`,
           { userId, name }
         );
         return { merged: true };
@@ -74,7 +74,7 @@ function createMergeDuplicateNodesTool(driverPromise: Promise<Neo4jDriver>, user
  * Curator tool: rename a relationship from a generic type to a specific one.
  * Only operates on relationships reachable from this user's node.
  */
-function createRenameRelationshipTool(driverPromise: Promise<Neo4jDriver>, userId: string) {
+export function createRenameRelationshipTool(driverPromise: Promise<Neo4jDriver>, userId: string) {
   return defineTool({
     name: "rename_relationship",
     description: [
@@ -87,19 +87,21 @@ function createRenameRelationshipTool(driverPromise: Promise<Neo4jDriver>, userI
     }),
     execute: async ({ relElementId, newType }: { relElementId: string; newType: string }) => {
       assertSafeRelation(newType, "newType");
-      if (!REL_ELEMENT_ID_PATTERN.test(relElementId)) {
+      if (!ELEMENT_ID_RE.test(relElementId)) {
         throw new Error(`rename_relationship: invalid relElementId "${relElementId}"`);
       }
       const driver = await driverPromise;
       const s = driver.session();
       try {
         await s.run(
-          `MATCH (u:User {id: $userId})-[old:${newType === "DELETED" ? newType : "X"}]->(v)
-           WHERE elementId(old) = $relId
-           WITH old, v, u, type(old) AS oldType
-           CALL apoc.refactor.relType(old, $newType) YIELD input, output
-           RETURN output`,
-          { userId, relId: relElementId, newType }
+          `MATCH (u:User {id: $userId})-[old]->(v)
+           WHERE elementId(old) = $relId AND type(old) <> $newType
+           CREATE (u)-[new:${newType}]->(v)
+           WITH old, new
+           SET new += properties(old)
+           DELETE old
+           RETURN count(new) AS renamed`,
+          { userId, relId: relElementId }
         );
         return { renamed: true };
       } finally {
@@ -112,7 +114,7 @@ function createRenameRelationshipTool(driverPromise: Promise<Neo4jDriver>, userI
 /**
  * Curator tool: delete a single relationship reachable from this user's node.
  */
-function createDeleteRelationshipTool(driverPromise: Promise<Neo4jDriver>, userId: string) {
+export function createDeleteRelationshipTool(driverPromise: Promise<Neo4jDriver>, userId: string) {
   return defineTool({
     name: "delete_relationship",
     description: [
@@ -123,7 +125,7 @@ function createDeleteRelationshipTool(driverPromise: Promise<Neo4jDriver>, userI
       relElementId: z.string().describe("Element ID of the relationship to delete"),
     }),
     execute: async ({ relElementId }: { relElementId: string }) => {
-      if (!REL_ELEMENT_ID_PATTERN.test(relElementId)) {
+      if (!ELEMENT_ID_RE.test(relElementId)) {
         throw new Error(`delete_relationship: invalid relElementId "${relElementId}"`);
       }
       const driver = await driverPromise;

@@ -1,7 +1,7 @@
 import type { VoiceProvider, VoiceSession, VoiceAgentEvent, VoiceConnectOptions } from "../types.js";
 import type { STTProvider } from "../stt/types.js";
 import type { TTSProvider } from "../tts/types.js";
-import type { Provider } from "../../types.js";
+import type { Provider, ToolCallPart, ContentPart, GenerateResult, Usage, Message } from "../../types.js";
 import { createClient, GuardrailBlockedError } from "../../client.js";
 import { executeToolCalls } from "../../tool-loop.js";
 import { createTrace, recordEvent, addUsage, finishTrace, type RunTrace } from "../../trace.js";
@@ -14,7 +14,8 @@ export interface PipelineVoiceOptions { stt: STTProvider; llm: Provider; tts: TT
 export function pipelineVoice(options: PipelineVoiceOptions): VoiceProvider {
   return { name: "pipeline:" + options.llm.name, async connect(connectOptions: VoiceConnectOptions): Promise<VoiceSession> {
   const agent = connectOptions.agent; const voiceSession = connectOptions.session; const runId = randomUUID();
-  const trace: RunTrace = createTrace(runId, agent.name);
+  const onApprovalRequest = connectOptions.onApprovalRequest;
+  const trace = createTrace(runId, agent.name);
   const handlers = new Map<string, Set<Function>>();
   function emit(event: VoiceAgentEvent) { const s = handlers.get(event.type); if (s) for (const h of [...s]) { try { (h as any)(event); } catch {} } }
   function on(type: string, handler: Function): () => void { if (!handlers.has(type)) handlers.set(type, new Set()); handlers.get(type)!.add(handler); return () => handlers.get(type)?.delete(handler); }
@@ -40,9 +41,9 @@ export function pipelineVoice(options: PipelineVoiceOptions): VoiceProvider {
     const client = createClient({ provider: options.llm });
     const shaping = engine.getShapingSuffix(transcript);
     const system = agent.instructions + (shaping ? " " + shaping : "");
-    let hist: import("../../types.js").Message[] = [];
+    let hist: Message[] = [];
     if (voiceSession) { try { hist = await voiceSession.getMessages(); } catch {} }
-    let llmMessages = [...hist];
+    let llmMessages: Message[] = [...hist];
     const lastContent = llmMessages[llmMessages.length-1]?.content;
     if (lastContent !== transcript) llmMessages.push({ role: "user", content: transcript });
     // input guardrails — same fail-closed shape as run.ts
@@ -56,30 +57,64 @@ export function pipelineVoice(options: PipelineVoiceOptions): VoiceProvider {
       }
       if (r.modifiedMessages) llmMessages = r.modifiedMessages;
     }
-    let fullText = ""; let buffer = ""; let usage: import("../../types.js").Usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }; let startedSpeaking = false;
-    let toolCalls = [];
-    try {
-      for await (const chunk of client.stream({ model: agent.model, system, messages: llmMessages, tools: agent.tools, maxToolRoundtrips: 1, signal: llmAbort.signal })) {
-        if (closed || llmAbort.signal.aborted) break;
-        if (chunk.type === "text-delta") { fullText += chunk.textDelta; buffer += chunk.textDelta;
-          if (!startedSpeaking && hasSentenceBoundary(buffer) && buffer.trim().length > 10) { engine.handleAgentSpeechStarted(); startedSpeaking = true; try { ttsSession.synthesize(buffer, { voiceId: agent.voice?.voiceId }); } catch {} buffer = ""; }
-          else if (startedSpeaking && hasSentenceBoundary(buffer)) { try { ttsSession.synthesize(buffer, { voiceId: agent.voice?.voiceId }); } catch {} buffer = ""; }
-        } else if (chunk.type === "tool-call") { toolCalls.push(chunk.toolCall); engine.handleToolStarted(chunk.toolCall.toolName, chunk.toolCall.args); }
-        else if (chunk.type === "tool-result") { engine.handleToolCompleted(chunk.toolResult.toolName, chunk.toolResult.result); }
-        else if (chunk.type === "finish") { usage = chunk.usage; }
+
+    let fullText = ""; let buffer = ""; let usage: Usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }; let startedSpeaking = false;
+    const MAX_ROUNDS = 5;
+
+    // ── Tool loop: stream -> collect tool calls -> execute -> stream again ──
+    for (let round = 0; round < MAX_ROUNDS; round++) {
+      if (closed || llmAbort.signal.aborted) return;
+      let turnText = ""; let turnBuffer = ""; let turnToolCalls: ToolCallPart[] = [];
+      try {
+        for await (const chunk of client.stream({ model: agent.model, system, messages: llmMessages, tools: agent.tools, maxToolRoundtrips: 0, signal: llmAbort.signal })) {
+          if (closed || llmAbort.signal.aborted) break;
+          if (chunk.type === "text-delta") {
+            turnText += chunk.textDelta; turnBuffer += chunk.textDelta; fullText += chunk.textDelta; buffer += chunk.textDelta;
+            if (!startedSpeaking && hasSentenceBoundary(turnBuffer) && turnBuffer.trim().length > 10) { engine.handleAgentSpeechStarted(); startedSpeaking = true; try { ttsSession.synthesize(turnBuffer, { voiceId: agent.voice?.voiceId }); } catch {} turnBuffer = ""; buffer = ""; }
+            else if (startedSpeaking && hasSentenceBoundary(turnBuffer)) { try { ttsSession.synthesize(turnBuffer, { voiceId: agent.voice?.voiceId }); } catch {} turnBuffer = ""; buffer = ""; }
+          } else if (chunk.type === "tool-call") {
+            turnToolCalls.push(chunk.toolCall);
+            engine.handleToolStarted(chunk.toolCall.toolName, chunk.toolCall.args);
+          } else if (chunk.type === "tool-result") {
+            engine.handleToolCompleted(chunk.toolResult.toolName, chunk.toolResult.result);
+          } else if (chunk.type === "finish") { usage = chunk.usage; }
+        }
+      } catch (err: any) { if (err?.name === "AbortError" || llmAbort.signal.aborted) return; const e = err instanceof Error ? err : new Error(String(err)); engine.handleRunFailed(e); return; }
+
+      // Append ONE assistant message containing both text and tool-call parts.
+      if (turnText || turnToolCalls.length > 0) {
+        const contentParts: ContentPart[] = [];
+        if (turnText) contentParts.push({ type: "text", text: turnText });
+        for (const tc of turnToolCalls) contentParts.push(tc);
+        llmMessages.push({ role: "assistant", content: contentParts });
       }
-      if (toolCalls.length > 0 && !llmAbort.signal.aborted) {
-        const results = await executeToolCalls(toolCalls, agent.tools ?? [], { agentName: agent.name });
+
+      // Execute tools and feed results back for the next round.
+      if (turnToolCalls.length > 0 && !llmAbort.signal.aborted) {
+        const results = await executeToolCalls(turnToolCalls, agent.tools ?? [], {
+          agentName: agent.name,
+          onApprovalRequest: onApprovalRequest as any,
+        });
         for (const r of results) engine.handleToolCompleted(r.toolName, r.result);
-        try { await voiceSession?.appendMessages([{ role: "tool", content: results }]); } catch {}
+        llmMessages.push({ role: "tool", content: results });
+        fullText = ""; // reset spoken text for the next round's TTS
+        buffer = "";
+        startedSpeaking = false;
+        continue;
       }
-      if (buffer.trim() && !llmAbort.signal.aborted) { if (!startedSpeaking) { engine.handleAgentSpeechStarted(); startedSpeaking = true; } try { ttsSession.synthesize(buffer, { voiceId: agent.voice?.voiceId }); } catch {} }
-      // output guardrails — same shape as run.ts
+
+      // No tool calls this round — final text response. Flush remaining buffer.
+      if (turnBuffer.trim() && !llmAbort.signal.aborted) {
+        if (!startedSpeaking) { engine.handleAgentSpeechStarted(); startedSpeaking = true; }
+        try { ttsSession.synthesize(turnBuffer, { voiceId: agent.voice?.voiceId }); } catch {}
+        buffer = "";
+      }
+
+      // Output guardrails — same shape as run.ts
       if (fullText && !llmAbort.signal.aborted) {
-        let _text = fullText;
-        let _object: unknown = fullText;
+        let _text = fullText; let _object: unknown = fullText; let _toolCalls = turnToolCalls;
         for (const g of (agent as any).guardrails?.output ?? []) {
-          const dummy: import("../../types.js").GenerateResult = { model: agent.model, text: _text, toolCalls, finishReason: "stop", usage, messages: llmMessages, raw: null, object: _object };
+          const dummy: GenerateResult = { model: agent.model, text: _text, toolCalls: _toolCalls, finishReason: "stop", usage, messages: llmMessages, raw: null, object: _object };
           const out = await g({ result: dummy });
           if (!out.allowed) {
             const reason = out.reason ?? "unspecified";
@@ -90,10 +125,21 @@ export function pipelineVoice(options: PipelineVoiceOptions): VoiceProvider {
           if (out.modifiedResult) { if (out.modifiedResult.text !== undefined) _text = out.modifiedResult.text; if (out.modifiedResult.object !== undefined) _object = out.modifiedResult.object; }
         }
         fullText = _text;
-        // flush any remaining buffer text that may differ after guardrail rewrite
       }
-      if (fullText && !llmAbort.signal.aborted) { await voiceSession?.appendMessages([{ role: "assistant", content: fullText }]); recordEvent(trace, { type: "model-call", agentName: agent.name, model: agent.model, turn: 1 } as any); recordEvent(trace, { type: "model-call-completed", agentName: agent.name, usage } as any); addUsage(trace, usage); engine.handleRunCompleted(usage); }
-    } catch (err: any) { if (err?.name === "AbortError" || llmAbort.signal.aborted) return; const e = err instanceof Error ? err : new Error(String(err)); engine.handleRunFailed(e); }
+
+      if (fullText && !llmAbort.signal.aborted) {
+        await voiceSession?.appendMessages([{ role: "assistant", content: fullText }]);
+        recordEvent(trace, { type: "model-call", agentName: agent.name, model: agent.model, turn: round + 1 } as any);
+        recordEvent(trace, { type: "model-call-completed", agentName: agent.name, usage } as any);
+        addUsage(trace, usage);
+        engine.handleRunCompleted(usage);
+      }
+      return;
+    }
+    // Exhausted MAX_ROUNDS — stop to avoid infinite loops.
+    if (!llmAbort.signal.aborted) {
+      engine.handleRunFailed(new Error("voice pipeline: reached maximum tool roundtrips (" + MAX_ROUNDS + ")"));
+    }
   }
   const session: any = {
     sendAudio(chunk: ArrayBuffer) { if (!closed && sttSession) try { sttSession.sendAudio(chunk); } catch {} },

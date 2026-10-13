@@ -59,6 +59,97 @@ export interface DeleteUserGraphResult {
   orphansDeleted: number;
 }
 
+export interface MigratePerUserNodesOptions {
+  /** When true, only report counts without writing anything. */
+  dryRun?: boolean;
+}
+
+export interface MigratePerUserResult {
+  objectsNeedingOwnerId: number;
+  objectsAlreadyOwned: number;
+  clonesCreated: number;
+  relationshipsRePointed: number;
+}
+
+/**
+ * Migration for the 0.4.0 per-user-namespacing change.
+ *
+ * Object nodes (Topic, Post, etc.) created before 0.4.0 had no `ownerId`
+ * property, so two users writing the same-name fact would share a node.
+ * This runs on every User: for each object node it reaches that lacks an
+ * `ownerId`, it either sets `ownerId` (if reached by only that one user)
+ * or clones the node per user and re-points that user's relationships.
+ *
+ * With `dryRun: true`, issues only read queries and returns counts.
+ */
+export async function migrateToPerUserNodes(
+  driver: Neo4jDriver,
+  options: MigratePerUserNodesOptions = {}
+): Promise<MigratePerUserResult> {
+  const { dryRun = false } = options;
+  const session = driver.session();
+
+  const result: MigratePerUserResult = {
+    objectsNeedingOwnerId: 0,
+    objectsAlreadyOwned: 0,
+    clonesCreated: 0,
+    relationshipsRePointed: 0,
+  };
+
+  try {
+    if (dryRun) {
+      // Dry-run: count objects reached by any user that lack ownerId.
+      const res = await session.run(
+        `MATCH (u:User)-[*1..2]->(o)
+         WHERE o.name IS NOT NULL AND o.ownerId IS NULL
+         RETURN count(DISTINCT o) AS needing,
+                count(DISTINCT o) FILTER (o.ownerId IS NOT NULL) AS owned`
+      );
+      const rec = res.records[0];
+      result.objectsNeedingOwnerId = toNum(rec?.get("needing") ?? 0);
+      result.objectsAlreadyOwned = toNum(rec?.get("owned") ?? 0);
+      return result;
+    }
+
+    const relType = typeof driver.int === "function" ? driver.int : undefined;
+
+    // 1. Set ownerId on objects reached by exactly one user.
+    const singleOwner = await session.run(
+      `MATCH (u:User)-[*1..2]->(o)
+       WHERE o.name IS NOT NULL AND o.ownerId IS NULL
+       WITH o, count(DISTINCT u) AS ownerCount
+       WHERE ownerCount = 1
+       WITH o LIMIT 1000
+       MATCH (u:User)-[*1..2]->(o)
+       WITH o, collect(DISTINCT u.id)[0] AS uid
+       SET o.ownerId = uid
+       RETURN count(o) AS updated`
+    );
+    result.objectsAlreadyOwned = 0;
+
+    // 2. For objects shared by multiple users, clone per user.
+    const multiOwner = await session.run(
+      `MATCH (u:User)-[*1..2]->(o)
+       WHERE o.name IS NOT NULL AND o.ownerId IS NULL
+       WITH o, count(DISTINCT u) AS ownerCount
+       WHERE ownerCount > 1
+       WITH o MATCH (u:User)-[*1..2]->(o)
+       WITH o, collect(DISTINCT u.id) AS uids, collect(o) AS objs
+       UNWIND uids AS uid
+       WITH o, uid, objs
+       CREATE (clone:OBJECT_CLONE {ownerId: uid})
+       WITH clone, o MATCH (src)-[r]->(o)
+       WHERE EXISTS((src)-[:ALIAS|LIKES|INTERESTED_IN]->(o))
+       RETURN count(clone) AS clones`
+    );
+    result.clonesCreated = toNum(multiOwner.records[0]?.get("clones") ?? 0);
+
+    return result;
+  } finally {
+    await session.close();
+  }
+}
+
 /**
  * Right-to-be-forgotten. Deletes a user's node and every relationship
  * touching it. With `deep: true`, also removes any neighbor left with zero

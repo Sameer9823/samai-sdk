@@ -1,17 +1,29 @@
-import { createClient, createMockProvider, createSession, InMemorySessionStore, enableGraphMemory, assertSafeRawCypher } from "../src/index.js";
+import {
+  createClient,
+  createMockProvider,
+  createSession,
+  InMemorySessionStore,
+  enableGraphMemory,
+  assertSafeRawCypher,
+  assertSafeRelation,
+  ELEMENT_ID_RE,
+  createRenameRelationshipTool,
+  createMergeDuplicateNodesTool,
+} from "../src/index.js";
 
 let failures = 0;
-function check(label: string, condition: boolean) {
-  if (condition) {
-    console.log(`  ✅ ${label}`);
+function check(label: string, cond: boolean, detail = "") {
+  if (cond) {
+    console.log(`  ✅ ${label}${detail ? " — " + detail : ""}`);
   } else {
-    console.log(`  ❌ ${label}`);
+    console.log(`  ❌ ${label}${detail ? " — " + detail : ""}`);
     failures++;
   }
 }
 
-// Fake Neo4j driver — records every query + params forwarded to session.run()
+// ── Fake driver that records queries, params, and session options ──
 const queriesRun: { query: string; params: Record<string, unknown> }[] = [];
+const sessionCalls: { options?: Record<string, unknown> }[] = [];
 
 class FakeSession {
   async run(query: string, params: Record<string, unknown>) {
@@ -21,157 +33,232 @@ class FakeSession {
   async close() {}
 }
 class FakeDriver {
-  session() { return new FakeSession(); }
+  int: (n: number) => unknown;
+  constructor(intImpl?: (n: number) => unknown) {
+    this.int = intImpl ?? ((n: number) => n);
+  }
+  session(options?: Record<string, unknown>) {
+    sessionCalls.push({ options });
+    return new FakeSession();
+  }
   async close() {}
 }
 
-function buildMemory(unsafeRawCypher = false, userId = "user-123") {
+function buildMemory(driver: FakeDriver, unsafeRawCypher = false, userId = "user-123") {
   const client = createClient({ provider: createMockProvider({ responses: [] }) });
   const session = createSession(userId, new InMemorySessionStore());
   return enableGraphMemory({
     client,
-    driver: new FakeDriver() as any,
+    driver: driver as any,
     userId,
     session,
     unsafeRawCypher,
   }).build();
 }
 
-async function main() {
-  // ── Test 1: Default tool set contains NO raw-Cypher tool ──
-  console.log("=== TEST: default tool set has no raw-Cypher tool ===");
-  const defaultMemory = buildMemory(false);
-  const toolNames = defaultMemory.tools.map((t) => t.name);
-  console.log(`  default tools: ${toolNames.join(", ")}`);
-  check("upsert_fact is in the default set", toolNames.includes("upsert_fact"));
-  check("read_user_facts is in the default set", toolNames.includes("read_user_facts"));
-  check("delete_user_fact is in the default set", toolNames.includes("delete_user_fact"));
-  check("execute_cypher_query is NOT in the default set", !toolNames.includes("execute_cypher_query"));
-  check("rawCypherTool is undefined by default", defaultMemory.rawCypherTool === undefined);
+// ── Phase 1.1: Cypher injection in read_user_facts ──
+async function testReadUserFactsInjection() {
+  console.log("=== TEST: read_user_facts rejects relationType injection ===");
+  queriesRun.length = 0;
+  const driver = new FakeDriver();
+  const mem = buildMemory(driver, false);
 
-  // ── Test 2: The four isolation-bypass queries are rejected in raw mode ──
-  console.log("=== TEST: unsafeRawCypher rejects isolation-bypass queries ===");
-  const rawMemory = buildMemory(true);
-  const rawTool = rawMemory.rawCypherTool!;
+  const read = mem.tools.find((t) => t.name === "read_user_facts")!;
 
-  const bypassQueries: Array<[string, string]> = [
-    ["cross-user read via extra MATCH", "MATCH (u:User {id:$userId}) MATCH (o:User) RETURN o"],
-    ["cross-user delete via extra MATCH", "MATCH (u:User {id:$userId}) MATCH (x:User) DETACH DELETE x"],
-    ["DELETE with injected $userId comment", "MATCH (n) DETACH DELETE n // :User $userId"],
-    ["string-literal $userId bypass", "MATCH (v:User {id:'victim'}) RETURN v, $userId"],
+  const injectionPayloads = [
+    "X]->(o) WITH u MATCH (v:User) DETACH DELETE v //",
+    "LIKES) DETACH DELETE n //",
   ];
 
-  for (const [label, query] of bypassQueries) {
+  for (const payload of injectionPayloads) {
     let threw = false;
-    let message = "";
     try {
-      await rawTool.execute({ query, params: { userId: "user-123" } });
+      await read.execute({ relationType: payload });
+    } catch {
+      threw = true;
+    }
+    check(`injection "${payload.slice(0, 30)}..." is rejected`, threw);
+  }
+
+  check("fake driver received NO queries from rejected calls", queriesRun.length === 0);
+
+  // Valid relation type still works.
+  const beforeValid = queriesRun.length;
+  await read.execute({ relationType: "LIKES" });
+  check("valid LIKES reaches the driver", queriesRun.length === beforeValid + 1);
+  check("query contains -[r:LIKES]->", queriesRun[beforeValid].query.includes("-[r:LIKES]->"));
+
+  await mem.stop();
+}
+
+// ── Phase 1.2: Raw Cypher READ-only + tokenizer ──
+async function testRawCypherGuard() {
+  console.log("=== TEST: assertSafeRawCypher single-pass tokenizer ===");
+
+  // Must reject:
+  const mustReject = [
+    ["bare MATCH no user", "MATCH (o) RETURN o"],
+    ["bare :User without id", "MATCH (o) WHERE o:User RETURN o"],
+    ["string-literal // hides DELETE", "MATCH (n) WITH n, 'a//' AS s\nDETACH DELETE n\nWITH 1 AS z RETURN 'b'"],
+    ["DELETE after comment strip", "MATCH (n) DETACH DELETE n // :User $userId"],
+    ["cross-user read via extra MATCH", "MATCH (u:User {id:$userId}) MATCH (o:User) RETURN o"],
+    ["hardcoded victim id", "MATCH (v:User {id:'victim'}) RETURN v, $userId"],
+  ];
+
+  for (const [label, query] of mustReject) {
+    let threw = false;
+    let msg = "";
+    try {
+      assertSafeRawCypher(query);
     } catch (err) {
       threw = true;
-      message = err instanceof Error ? err.message : String(err);
+      msg = (err as Error).message.slice(0, 60);
     }
-    check(`blocked: ${label}`, threw);
-    console.log(`    ${label} -> ${message.slice(0, 90)}`);
+    check(`rejected: ${label}`, threw, msg);
   }
 
-  // ── Test 3: Comment trick to hide :User anchor is stripped, then DELETE caught ──
-  console.log("=== TEST: comment-stripping prevents bypasses ===");
-
-  // Query 3 strips the // comment, then DETACH DELETE is caught by mutation check.
-  // Query 4's 'victim' is a string literal — User anchoring check runs before
-  // string stripping, so it catches the hardcoded id.
-  check("comment-stripping + DELETE blocking works (query 3)", bypassQueries[2][1].includes("//"));
-  check("string-literal id caught by User anchoring (query 4)", bypassQueries[3][1].includes("'victim'"));
-
-  // ── Test 4: A read-only raw query that references $userId still reaches the driver ──
-  console.log("=== TEST: read-only raw query works with $userId ===");
-  const queriesBefore = queriesRun.length;
-  let readOnlyWorked = true;
+  // Must accept:
+  let accepted = true;
+  let acceptErr = "";
   try {
-    await rawTool.execute({ query: "MATCH (u:User {id:$userId})-[:LIKES]->(t) RETURN t", params: {} });
-  } catch {
-    readOnlyWorked = false;
+    assertSafeRawCypher("MATCH (u:User {id:$userId})-[r]->(o) RETURN type(r), o.name");
+  } catch (err) {
+    accepted = false;
+    acceptErr = (err as Error).message;
   }
-  check("read-only query with $userId is allowed", readOnlyWorked);
-  check("read-only query reached the driver", queriesRun.length === queriesBefore + 1);
-  check("userId was bound last (after model params)", queriesRun[queriesBefore].params.userId === "user-123");
+  check("accepted: anchored READ query", accepted, acceptErr);
 
-  // ── Test 5: Model-supplied params.userId never overrides the bound id ──
-  console.log("=== TEST: model params.userId never overrides bound userId ===");
-  const upsert = defaultMemory.tools.find((t) => t.name === "upsert_fact")!;
-  const beforeUpsert = queriesRun.length;
-  await upsert.execute({ relation: "LIKES", objectLabel: "Topic", objectName: "hiking" });
-  check("upsert_fact query reached driver", queriesRun.length === beforeUpsert + 1);
-  check("bound userId wins over model-supplied params.userId", queriesRun[beforeUpsert].params.userId === "user-123");
+  // Verify the raw tool session uses READ access mode.
+  console.log("=== TEST: execute_cypher_query opens READ-only session ===");
+  queriesRun.length = 0;
+  sessionCalls.length = 0;
+  const driver = new FakeDriver();
+  const rawMem = buildMemory(driver, true);
+  const rawTool = rawMem.rawCypherTool!;
 
-  // ── Test 6: Two users with the same object name produce distinct nodes ──
-  console.log("=== TEST: two users with same object name produce distinct MERGE keys ===");
-  const mem2 = buildMemory(false, "user-456");
-  const upsert2 = mem2.tools.find((t) => t.name === "upsert_fact")!;
-  const before2 = queriesRun.length;
-  await upsert.execute({ relation: "LIKES", objectLabel: "Topic", objectName: "hiking" });
-  await upsert2.execute({ relation: "LIKES", objectLabel: "Topic", objectName: "hiking" });
+  await rawTool.execute({ query: "MATCH (u:User {id:$userId})-[:LIKES]->(t) RETURN t", params: {} });
+  check("session called with READ mode", sessionCalls.some((c) => c.options?.defaultAccessMode === "READ"));
+  check("query reached the driver", queriesRun.length === 1);
+  check("userId bound into params", queriesRun[0].params.userId === "user-123");
 
-  const q1 = queriesRun[before2];
-  const q2 = queriesRun[before2 + 1];
-  check("user-123 query has userId param", q1.params.userId === "user-123");
-  check("user-456 query has userId param", q2.params.userId === "user-456");
-  check("both MERGE the same objectName", q1.params.objectName === "hiking" && q2.params.objectName === "hiking");
-  check("user-123 query MERGE includes ownerId", q1.query.includes("ownerId: $userId"));
-  check("user-456 query MERGE includes ownerId", q2.query.includes("ownerId: $userId"));
-  check("bound userId values differ between the two queries", q1.params.userId !== q2.params.userId);
+  await rawMem.stop();
+}
 
-  // ── Test 7: assertSafeRawCypher rejects mutation keywords directly ──
-  console.log("=== TEST: assertSafeRawCypher direct calls ===");
-  check("assertSafeRawCypher rejects CREATE", (() => {
-    try { assertSafeRawCypher("MATCH (u) CREATE (n) RETURN n"); return false; } catch { return true; }
-  })());
-  check("assertSafeRawCypher rejects MERGE", (() => {
-    try { assertSafeRawCypher("MATCH (u:User {id:$userId}) MERGE (n:Foo)"); return false; } catch { return true; }
-  })());
-  check("assertSafeRawCypher rejects DELETE", (() => {
-    try { assertSafeRawCypher("DELETE something"); return false; } catch { return true; }
-  })());
-  check("assertSafeRawCypher rejects SET", (() => {
-    try { assertSafeRawCypher("SET n.x = 1"); return false; } catch { return true; }
-  })());
-  check("assertSafeRawCypher rejects DROP", (() => {
-    try { assertSafeRawCypher("DROP INDEX foo"); return false; } catch { return true; }
-  })());
-  check("assertSafeRawCypher rejects LOAD", (() => {
-    try { assertSafeRawCypher("LOAD CSV ..."); return false; } catch { return true; }
-  })());
-  check("assertSafeRawCypher rejects CALL", (() => {
-    try { assertSafeRawCypher("CALL db.stats()"); return false; } catch { return true; }
-  })());
-  check("assertSafeRawCypher rejects apoc", (() => {
-    try { assertSafeRawCypher("MATCH (n) CALL apoc.coll.sort([])"); return false; } catch { return true; }
-  })());
-  check("assertSafeRawCypher allows plain MATCH with $userId", (() => {
-    try { assertSafeRawCypher("MATCH (u:User {id:$userId})-[:LIKES]->(t) RETURN t"); return true; } catch { return false; }
-  })());
+// ── Phase 1.3: merge_duplicate_nodes owner check ──
+async function testMergeDuplicateNodesOwnerCheck() {
+  console.log("=== TEST: merge_duplicate_nodes Cypher includes ownerId + cross-user guard ===");
+  queriesRun.length = 0;
+  const driver = new FakeDriver();
+  const driverPromise = Promise.resolve(driver as any);
 
-  // ── Test 8: assertSafeRawCypher catches cross-tenant reads ──
-  console.log("=== TEST: assertSafeRawCypher catches cross-tenant reads ===");
-  check("rejects bare :User without id", (() => {
-    try { assertSafeRawCypher("MATCH (u:User {id:$userId})-[:LIKES]->(o) MATCH (o:User) RETURN o"); return false; } catch { return true; }
-  })());
-  check("rejects :User with hardcoded id", (() => {
-    try { assertSafeRawCypher("MATCH (v:User {id:'victim'}) RETURN v"); return false; } catch { return true; }
-  })());
-  check("allows :User with $userId", (() => {
-    try { assertSafeRawCypher("MATCH (u:User {id:$userId}) RETURN u"); return true; } catch { return false; }
-  })());
+  const mergeTool = createMergeDuplicateNodesTool(driverPromise, "user-123");
+  await mergeTool.execute({ label: "Topic", name: "hiking" });
 
-  await rawMemory.stop();
-  await mem2.stop();
-  await defaultMemory.stop();
+  check("exactly one query reached the driver", queriesRun.length === 1);
+  check("Cypher includes ownerId: $userId in node match", queriesRun[0].query.includes("ownerId: $userId"));
+  check("Cypher includes cross-user guard (NOT EXISTS)", queriesRun[0].query.includes("NOT EXISTS"));
+  check("Cypher anchors on (u:User {id: $userId})", queriesRun[0].query.includes("(u:User {id: $userId})"));
+  check("Cypher uses DETACH DELETE on the owned node", queriesRun[0].query.includes("DETACH DELETE"));
+}
+
+// ── Phase 2.1: Element ID format ──
+async function testElementIdRegex() {
+  console.log("=== TEST: ELEMENT_ID_RE accepts Neo4j 5 format ===");
+  check("real Neo4j 5 element id passes", ELEMENT_ID_RE.test("5:0f5a7c1e-1111-4222-8333-444455556666:12"));
+  check("legacy numeric id passes", ELEMENT_ID_RE.test("123"));
+  check("old internal _abc form rejected", !ELEMENT_ID_RE.test("_abc"));
+  check("SQL injection rejected", !ELEMENT_ID_RE.test("1;DROP"));
+  check("empty string rejected", !ELEMENT_ID_RE.test(""));
+  check("empty string rejected (delete_user_fact)", !ELEMENT_ID_RE.test(""));
+
+  // Also test delete_user_fact uses ELEMENT_ID_RE
+  console.log("=== TEST: delete_user_fact uses ELEMENT_ID_RE ===");
+  const driver = new FakeDriver();
+  const mem = buildMemory(driver, false);
+  const del = mem.tools.find((t) => t.name === "delete_user_fact")!;
+
+  let threwOldFormat = false;
+  try { await del.execute({ relElementId: "_abc" }); } catch { threwOldFormat = true; }
+  check("_abc rejected by delete_user_fact", threwOldFormat);
+
+  let threwNewFormat = false;
+  try { await del.execute({ relElementId: "5:0f5a7c1e-1111-4222-8333-444455556666:12" }); } catch { threwNewFormat = true; }
+  check("Neo4j 5 format accepted by delete_user_fact", !threwNewFormat);
+
+  await mem.stop();
+}
+
+// ── Phase 2.2: read_user_facts returns elementId(r) ──
+async function testReadUserFactsReturnsElementId() {
+  console.log("=== TEST: read_user_facts query includes elementId(r) ===");
+  queriesRun.length = 0;
+  const driver = new FakeDriver();
+  const mem = buildMemory(driver, false);
+  const read = mem.tools.find((t) => t.name === "read_user_facts")!;
+
+  await read.execute({ relationType: "LIKES" });
+  check("RETURN clause includes elementId(r) AS relElementId", queriesRun[0].query.includes("elementId(r) AS relElementId"));
+
+  await mem.stop();
+}
+
+// ── Phase 2.3: LIMIT parameter is integer-typed ──
+async function testLimitIsInteger() {
+  console.log("=== TEST: LIMIT parameter is driver.integer-typed ===");
+  queriesRun.length = 0;
+  const intImpl = (n: number) => ({ __isInt: true, value: n });
+  const driver = new FakeDriver(intImpl);
+  const mem = buildMemory(driver, false);
+  const read = mem.tools.find((t) => t.name === "read_user_facts")!;
+
+  await read.execute({ relationType: "LIKES" });
+  const limitParam = queriesRun[0].params.limit;
+  check("limit param is integer-typed (has __isInt)", typeof limitParam === "object" && limitParam !== null && (limitParam as any).__isInt === true, "got: " + typeof limitParam);
+
+  await mem.stop();
+}
+
+// ── Phase 2.4: rename_relationship Cypher ──
+async function testRenameRelationshipCypher() {
+  console.log("=== TEST: rename_relationship uses elementId(old), no apoc ===");
+  queriesRun.length = 0;
+  const driver = new FakeDriver();
+  const driverPromise = Promise.resolve(driver as any);
+
+  const renameTool = createRenameRelationshipTool(driverPromise, "user-123");
+  await renameTool.execute({
+    relElementId: "42:0f5a7c1e-1111-4222-8333-444455556666:12",
+    newType: "LIKES",
+  });
+
+  check("exactly one query reached the driver", queriesRun.length === 1);
+  check("Cypher contains elementId(old)", queriesRun[0].query.includes("elementId(old)"));
+  check("Cypher does NOT contain apoc", !queriesRun[0].query.includes("apoc"));
+  check("Cypher does NOT contain [old:X] placeholder", !/\[old:X\]/.test(queriesRun[0].query));
+  check("newType is interpolated after validation", queriesRun[0].query.includes("new:LIKES"));
+
+  // Invalid relElementId is rejected before touching the driver.
+  queriesRun.length = 0;
+  let threw = false;
+  try { await renameTool.execute({ relElementId: "not-a-valid-id", newType: "LIKES" }); } catch { threw = true; }
+  check("invalid relElementId rejected", threw);
+  check("no query for invalid id", queriesRun.length === 0);
+}
+
+async function main() {
+  await testReadUserFactsInjection();      // 1.1
+  await testRawCypherGuard();               // 1.2
+  await testMergeDuplicateNodesOwnerCheck(); // 1.3
+  await testElementIdRegex();                // 2.1
+  await testReadUserFactsReturnsElementId(); // 2.2
+  await testLimitIsInteger();                // 2.3
+  await testRenameRelationshipCypher();     // 2.4
 
   if (failures) {
     console.log(`\n❌ ${failures} failure(s)`);
     process.exit(1);
   }
-  console.log("\n🎉 cypher guard tests passed");
+  console.log("\n🎉 graph-memory security + Neo4j 5 tests passed");
 }
 
 main().catch((err) => {

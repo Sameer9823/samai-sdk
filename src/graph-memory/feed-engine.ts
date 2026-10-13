@@ -77,7 +77,7 @@ export function createFeedEngine(options: FeedEngineOptions): FeedEngine {
                   socialSignal, interestSignal, score
            ORDER BY score DESC
            LIMIT $limit`,
-          { userId, socialWeight, interestWeight, engagementWeight, limit: neoInt(limit) }
+           { userId, socialWeight, interestWeight, engagementWeight, limit: typeof driver.int === "function" ? driver.int(limit) : limit }
         );
         return result.records.map((r) => ({
           postId: String(r.get("postId")),
@@ -159,13 +159,8 @@ export function createFeedEngine(options: FeedEngineOptions): FeedEngine {
   };
 }
 
-// Neo4j's JS driver wants integers as its own Integer type for LIMIT — plain
-// numbers work in recent driver versions too, but this keeps it explicit and
-// avoids a silent float-vs-int mismatch on older driver versions.
-function neoInt(n: number): number {
-  return Math.trunc(n);
-}
-
+// LIMIT/SKIP params use the driver's `int()` (see createFeedEngine.getFeed)
+// so Neo4j receives an Integer, not a float.
 function toNum(v: unknown): number {
   if (v && typeof v === "object" && "toNumber" in (v as any)) return (v as any).toNumber();
   return typeof v === "number" ? v : Number(v);

@@ -49,8 +49,9 @@ export function useVoiceAgent(provider: VoiceProvider, agent: VoiceAgentConfig):
     try {
       const session = await provider.connect({ agent });
       sessionRef.current = session;
-      setIsConnected(true);
 
+      // Subscribe to events BEFORE marking as connected, so an immediate
+      // run-failed or connection-state event is never missed.
       unsubsRef.current.push(session.on("user-speech-started", () => setIsListening(true)));
       unsubsRef.current.push(
         session.on("user-speech-ended", (e) => {
@@ -71,6 +72,8 @@ export function useVoiceAgent(provider: VoiceProvider, agent: VoiceAgentConfig):
         })
       );
       unsubsRef.current.push(session.on("run-completed", () => setIsSpeaking(false)));
+
+      setIsConnected(true);
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err));
       setError(e);

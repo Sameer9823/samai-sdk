@@ -106,13 +106,15 @@ export type {
 // Requires the optional `neo4j-driver` peer dependency, dynamically imported
 // (same pattern as RedisSessionStore/ioredis) so the rest of the SDK works fine
 // without it installed.
-export { enableGraphMemory } from "./graph-memory/graph-memory.js";
+export { enableGraphMemory, loadNeo4jDriver } from "./graph-memory/graph-memory.js";
 export type {
   GraphMemory,
   GraphMemoryOptions,
   Neo4jCreds,
   Neo4jDriver,
   Neo4jSession,
+  Neo4jSessionOptions,
+  Neo4jSessionMode,
   Neo4jRecord,
   MinimalSession,
   MinimalMessage,
@@ -120,18 +122,18 @@ export type {
 
 export { chatWithMemory } from "./graph-memory/with-running-context.js";
 
-export { createUpsertFactTool, applyRecencyDecay } from "./graph-memory/fact-lifecycle.js";
+export { createUpsertFactTool, applyRecencyDecay, assertSafeRelation, ELEMENT_ID_RE } from "./graph-memory/fact-lifecycle.js";
 export type { UpsertFactParams, RecencyDecayOptions, RecencyDecayReport } from "./graph-memory/fact-lifecycle.js";
 
-export { runSelfCorrection, startSelfCorrectionLoop } from "./graph-memory/self-correction.js";
+export { runSelfCorrection, startSelfCorrectionLoop, createRenameRelationshipTool, createDeleteRelationshipTool, createMergeDuplicateNodesTool } from "./graph-memory/self-correction.js";
 export type { SelfCorrectionOptions, SelfCorrectionReport } from "./graph-memory/self-correction.js";
 
 export { createFeedEngine } from "./graph-memory/feed-engine.js";
 export type { FeedEngine, FeedEngineOptions, FeedItem, GetFeedOptions } from "./graph-memory/feed-engine.js";
 
 export { assertSafeRawCypher } from "./graph-memory/cypher-guard.js";
-export { ensureGraphConstraints, deleteUserGraph } from "./graph-memory/admin.js";
-export type { DeleteUserGraphOptions, DeleteUserGraphResult } from "./graph-memory/admin.js";
+export { ensureGraphConstraints, deleteUserGraph, migrateToPerUserNodes } from "./graph-memory/admin.js";
+export type { DeleteUserGraphOptions, DeleteUserGraphResult, MigratePerUserNodesOptions, MigratePerUserResult } from "./graph-memory/admin.js";
 
 export { createMetricsCollector } from "./graph-memory/metrics.js";
 export type { MetricsCollector, MetricsSnapshot } from "./graph-memory/metrics.js";

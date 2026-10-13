@@ -436,6 +436,84 @@ async function testOpenAIRealtimeOverWebRtc() {
   }
 }
 
+async function testWebRtcFunctionCall() {
+  console.log("=== TEST: openaiRealtime WebRTC handles function_call over the data channel ===");
+  installBrowserGlobals();
+  try {
+    const { impl } = fakeSdpFetch();
+    const toolCalls: any[] = [];
+    const agent = defineVoiceAgent({
+      name: "browser-fc-agent",
+      instructions: "You are a voice assistant that can call tools.",
+      model: "gpt-realtime",
+      tools: [
+        defineTool({
+          name: "get_time",
+          description: "Gets the current time",
+          parameters: z.object({}),
+          execute: async () => {
+            toolCalls.push({ tool: "get_time" });
+            return "12:00 PM";
+          },
+        }),
+      ],
+    });
+
+    const provider = openaiRealtime({
+      clientSecret: "ek_browser",
+      transport: "webrtc",
+      inputStream: new FakeMediaStream() as any,
+      fetchImpl: impl,
+    });
+
+    const toolEvents: any[] = [];
+    const vs: any = await provider.connect({ agent, session: createSession("webrtc-fc", new InMemorySessionStore()) });
+    for (const type of ["tool-started", "tool-completed"] as const) {
+      vs.on(type, (e: any) => toolEvents.push(e));
+    }
+
+    const channel = (FakeRTCPeerConnection.last as any).channel as FakeDataChannel;
+    check("data channel is open", channel.readyState === "open");
+
+    // Simulate the model requesting a tool call over the data channel.
+    channel.emitProtocol({
+      type: "response.function_call_arguments.done",
+      call_id: "call-1",
+      name: "get_time",
+      arguments: "{}",
+    });
+    channel.emitProtocol({
+      type: "response.output_item.done",
+      item: {
+        type: "function_call",
+        call_id: "call-1",
+        name: "get_time",
+        arguments: "{}",
+      },
+    });
+
+    // The tool executes asynchronously; wait for the round-trip.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    check("tool was executed", toolCalls.length === 1);
+    check("tool-started event emitted", toolEvents.some((e) => e.type === "tool-started" && e.toolName === "get_time"));
+    check("tool-completed event emitted", toolEvents.some((e) => e.type === "tool-completed"));
+
+    const sent = channel.sent.map((s) => JSON.parse(s));
+    const outputMsg = sent.find((m) => m.type === "conversation.item.create" && m.item?.type === "function_call_output");
+    check("function_call_output sent back on data channel", !!outputMsg);
+    check("output contains the tool result", outputMsg?.item?.output?.includes("12:00 PM"));
+
+    const responseCreate = sent.find((m) => m.type === "response.create");
+    check("response.create sent after tool output", !!responseCreate);
+
+    await vs.close();
+    check("session closed cleanly", vs.getRemoteStream() === null);
+  } finally {
+    restoreBrowserGlobals();
+  }
+}
+
 async function testWebRtcMisconfiguration() {
   console.log("=== TEST: openaiRealtime() guards its WebRTC configuration ===");
 
@@ -528,6 +606,7 @@ async function main() {
   await testWebRtcTransportNegotiation();
   await testWebRtcTransportErrors();
   await testOpenAIRealtimeOverWebRtc();
+  await testWebRtcFunctionCall();
   await testWebRtcMisconfiguration();
   testVoiceEntryExports();
 

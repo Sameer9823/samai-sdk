@@ -1,4 +1,4 @@
-import { ensureGraphConstraints, deleteUserGraph } from "../src/index.js";
+import { ensureGraphConstraints, deleteUserGraph, migrateToPerUserNodes } from "../src/index.js";
 
 const constraintQueries: string[] = [];
 
@@ -83,10 +83,42 @@ async function testDeepDelete() {
   console.log("PASS: deep delete's query includes the shared-node protection filter, and correctly maps the returned count.\n");
 }
 
+async function testMigrateDryRun() {
+  console.log("=== TEST: migrateToPerUserNodes dryRun issues no writes ===");
+  let writeCount = 0;
+  class MigrationSession {
+    async run(query: string, params: Record<string, unknown>) {
+      const isWrite = query.includes("SET ") || query.includes("CREATE ") || query.includes("DELETE ");
+      if (isWrite) { writeCount++; throw new Error("dry-run should not write"); }
+      if (query.includes("RETURN count(DISTINCT o)")) {
+        return { records: [{ get: (k: string) => (k === "needing" ? 3 : 0) }] };
+      }
+      return { records: [{ get: (k: string) => (k === "needing" ? 3 : 0) }] };
+    }
+    async close() {}
+  }
+  class MigrationDriver {
+    session() { return new MigrationSession(); }
+    int(n: number) { return n; }
+    async close() {}
+  }
+
+  const result = await migrateToPerUserNodes(new MigrationDriver() as any, { dryRun: true });
+  console.log("migration dry-run result:", result);
+  check("dryRun does not write", writeCount === 0);
+  check("reports objects needing ownerId", result.objectsNeedingOwnerId === 3);
+}
+
+function check(label: string, cond: boolean) {
+  if (cond) console.log(`  ✅ ${label}`);
+  else { console.log(`  ❌ ${label}`); }
+}
+
 async function main() {
   await testConstraints();
   await testShallowDelete();
   await testDeepDelete();
+  await testMigrateDryRun();
   console.log("ALL PASS");
 }
 
