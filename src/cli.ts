@@ -9,7 +9,7 @@ const SDK_VERSION = (() => {
   try {
     return JSON.parse(readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf-8")).version as string;
   } catch {
-    return "0.3.6";
+    return "0.3.7";
   }
 })();
 

@@ -9,3 +9,5 @@ docs/.next/
 *.tgz
 __cli_test_workspace
 demo
+__samai_test_sessions.db
+__trace_test_rel/

@@ -34,7 +34,31 @@ breaking changes — these are called out explicitly below. Patch versions
 -
 
 ### Fixed
--
+- `streamObject()`: awaiting only `object` or only `usage` on a deferred stream
+  no longer produces an `unhandledRejection` or resolves to `undefined`; the
+  unawaited promise is still marked handled, but the awaited one still rejects
+  with the provider error (0.3.6 regression in the deferred-promise refactor)
+- `handleFunctionCall()` in the realtime voice layer: malformed `arguments`
+  JSON from the model is now caught and emitted as a `function_call_output`
+  error block instead of crashing the session with an unhandled rejection
+- `createSandbox()` timeout handler: `process.kill` on a process-group PID no
+  longer throws `ESRCH` when the child has already exited (race condition)
+- PII guardrail (`rewriteMessage`): each text part of a structured
+  multi-part message is now redacted independently instead of applying a single
+  joined redaction across all parts, preserving image and tool-call content
+- Cypher guard (`assertSafeCypher`): model-supplied `$userId` params can no
+  longer override the bound user id; queries without `$userId`,
+  `CALL`/sub-query procedures, `LOAD CSV`, `apoc.*`, and unanchored
+  `DELETE`/`DETACH DELETE` are all rejected before reaching the driver
+- Tests: handle `EPERM` during SQLite session store cleanup on Windows;
+  fall back to file copy when symlinks aren't available in the CLI scaffold
+  test; skip bash/python tests in `sandbox-usage-test` on Windows when
+  `/bin/bash` isn't available
+- `.gitattributes` adds `* text=auto eol=lf` and normalizes line endings
+
+## [0.3.7] - 2026-10-13
+
+## [0.3.7] - 2026-10-13
 
 ## [0.3.6] - 2026-10-02
 
