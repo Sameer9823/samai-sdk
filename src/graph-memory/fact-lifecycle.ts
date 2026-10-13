@@ -24,7 +24,7 @@ import type { MetricsCollector } from "./metrics.js";
 const RELATION_PATTERN = /^[A-Z][A-Z0-9_]{0,63}$/;
 const LABEL_PATTERN = /^[A-Z][A-Za-z0-9]{0,63}$/;
 
-function assertSafeRelation(value: string, kind: string): void {
+export function assertSafeRelation(value: string, kind: string): void {
   if (!RELATION_PATTERN.test(value)) {
     throw new Error(
       `Invalid ${kind} "${value}": must be UPPER_SNAKE_CASE, start with a letter, max 64 chars (e.g. LIKES, INTERESTED_IN)`
@@ -88,12 +88,12 @@ export function createUpsertFactTool(driverPromise: Promise<Neo4jDriver>, userId
           retired += toNum(result.records[0]?.get("deleted"));
         }
 
-        await s.run(
-          `MERGE (u:User {id: $userId})
-           MERGE (o:${objectLabel} {name: $objectName})
-           MERGE (u)-[rel:${relation}]->(o)
-           SET rel.updatedAt = timestamp(),
-               rel.createdAt = coalesce(rel.createdAt, timestamp())`,
+          await s.run(
+           `MERGE (u:User {id: $userId})
+            MERGE (o:${objectLabel} {name: $objectName, ownerId: $userId})
+            MERGE (u)-[rel:${relation}]->(o)
+            SET rel.updatedAt = timestamp(),
+                rel.createdAt = coalesce(rel.createdAt, timestamp())`,
           { userId, objectName }
         );
 

@@ -28,7 +28,7 @@ async function testBasicUpsert() {
 
   if (queriesRun.length !== 1) throw new Error(`expected exactly 1 query, got ${queriesRun.length}`);
   if (!queriesRun[0].query.includes("MERGE (u)-[rel:LIKES]->(o)")) throw new Error("relation not embedded correctly");
-  if (!queriesRun[0].query.includes("MERGE (o:Topic {name: $objectName})")) throw new Error("label not embedded correctly");
+  if (!queriesRun[0].query.includes("MERGE (o:Topic {name: $objectName, ownerId: $userId})")) throw new Error("label not embedded correctly");
   if (!queriesRun[0].query.includes("rel.updatedAt = timestamp()")) throw new Error("missing timestamp write");
   if (result.retiredFacts !== 0) throw new Error("expected no retirements on a plain write");
 

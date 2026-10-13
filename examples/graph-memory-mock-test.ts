@@ -21,7 +21,7 @@ class FakeDriver {
 const mock = createMockProvider({
   responses: [
     { text: "Kyoto in autumn is gorgeous — want restaurant or itinerary ideas?" },
-    { toolCalls: [{ toolName: "execute_cypher_query", args: { query: "MERGE (u:User {id:$userId})-[:PLANNING]->(t:Trip {city:'Kyoto'})" } }] },
+    { toolCalls: [{ toolName: "upsert_fact", args: { relation: "PLANNING", objectLabel: "Trip", objectName: "Kyoto" } }] },
     { text: "User is planning a trip to Kyoto next month." },
   ],
 });

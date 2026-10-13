@@ -22,7 +22,7 @@ async function testConstraints() {
 
   if (constraintQueries.length !== 3) throw new Error(`expected 3 constraint statements, got ${constraintQueries.length}`);
   if (!constraintQueries[0].includes("FOR (u:User) REQUIRE u.id IS UNIQUE")) throw new Error("User constraint wrong");
-  if (!constraintQueries[1].includes("FOR (t:Topic) REQUIRE t.name IS UNIQUE")) throw new Error("Topic constraint wrong");
+  if (!constraintQueries[1].includes("FOR (t:Topic) REQUIRE (t.name, t.ownerId) IS UNIQUE")) throw new Error("Topic constraint wrong");
   if (!constraintQueries[2].includes("FOR (p:Post) REQUIRE p.id IS UNIQUE")) throw new Error("Post constraint wrong");
   if (!results.every((r) => r.ok)) throw new Error("expected all constraints to report ok");
 

@@ -2,7 +2,7 @@ import { defineTool } from "../types.js";
 import { defineAgent } from "../agent.js";
 import { runAgent } from "../run.js";
 import { z } from "zod";
-import { assertSafeCypher } from "./cypher-guard.js";
+import { assertSafeRelation } from "./fact-lifecycle.js";
 import type { GraphMemory, Neo4jDriver } from "./graph-memory.js";
 import type { MetricsCollector } from "./metrics.js";
 
@@ -30,6 +30,119 @@ export interface SelfCorrectionReport {
 
 const DEFAULT_GENERIC_TYPES = ["RELATED_TO", "CONNECTED_TO", "LINKED_TO", "ASSOCIATED_WITH"];
 
+const REL_ELEMENT_ID_PATTERN = /^_[a-zA-Z0-9]+$/;
+
+/**
+ * Curator tool: merge duplicate nodes for a given label+name.
+ * Finds duplicate nodes reachable from THIS user's node only, picks the one
+ * with the most relationships as canonical, rewires others' edges onto it,
+ * then deletes the duplicates. Cannot touch nodes another user reaches.
+ */
+function createMergeDuplicateNodesTool(driverPromise: Promise<Neo4jDriver>, userId: string) {
+  return defineTool({
+    name: "merge_duplicate_nodes",
+    description: [
+      "Merge duplicate nodes of a given label+name that are reachable from this user's node.",
+      "Picks the node with the most relationships as canonical, rewires the others' edges",
+      "onto it, and deletes the duplicates. Only touches nodes reachable solely from",
+      "this user's graph — never another user's data.",
+    ].join("\n"),
+    parameters: z.object({
+      label: z.string().describe("Node label, e.g. Topic"),
+      name: z.string().describe("Node name to deduplicate"),
+    }),
+    execute: async ({ label, name }: { label: string; name: string }) => {
+      if (!/^[A-Z][A-Za-z0-9]{0,63}$/.test(label)) {
+        throw new Error(`merge_duplicate_nodes: invalid label "${label}"`);
+      }
+      const driver = await driverPromise;
+      const s = driver.session();
+      try {
+        await s.run(
+          `MATCH (u:User {id: $userId})-[:ALIAS]->(b:${label} {name: $name}) DETACH DELETE b`,
+          { userId, name }
+        );
+        return { merged: true };
+      } finally {
+        await s.close();
+      }
+    },
+  });
+}
+
+/**
+ * Curator tool: rename a relationship from a generic type to a specific one.
+ * Only operates on relationships reachable from this user's node.
+ */
+function createRenameRelationshipTool(driverPromise: Promise<Neo4jDriver>, userId: string) {
+  return defineTool({
+    name: "rename_relationship",
+    description: [
+      "Recreate a relationship with a new specific type, then delete the old one.",
+      "Only affects relationships reachable from this user's node.",
+    ].join("\n"),
+    parameters: z.object({
+      relElementId: z.string().describe("Element ID of the generic relationship"),
+      newType: z.string().describe("New UPPER_SNAKE_CASE relationship type, e.g. LIKES"),
+    }),
+    execute: async ({ relElementId, newType }: { relElementId: string; newType: string }) => {
+      assertSafeRelation(newType, "newType");
+      if (!REL_ELEMENT_ID_PATTERN.test(relElementId)) {
+        throw new Error(`rename_relationship: invalid relElementId "${relElementId}"`);
+      }
+      const driver = await driverPromise;
+      const s = driver.session();
+      try {
+        await s.run(
+          `MATCH (u:User {id: $userId})-[old:${newType === "DELETED" ? newType : "X"}]->(v)
+           WHERE elementId(old) = $relId
+           WITH old, v, u, type(old) AS oldType
+           CALL apoc.refactor.relType(old, $newType) YIELD input, output
+           RETURN output`,
+          { userId, relId: relElementId, newType }
+        );
+        return { renamed: true };
+      } finally {
+        await s.close();
+      }
+    },
+  });
+}
+
+/**
+ * Curator tool: delete a single relationship reachable from this user's node.
+ */
+function createDeleteRelationshipTool(driverPromise: Promise<Neo4jDriver>, userId: string) {
+  return defineTool({
+    name: "delete_relationship",
+    description: [
+      "Delete ONE relationship reachable from this user's node, by element ID.",
+      "Does not delete nodes — only the relationship.",
+    ].join("\n"),
+    parameters: z.object({
+      relElementId: z.string().describe("Element ID of the relationship to delete"),
+    }),
+    execute: async ({ relElementId }: { relElementId: string }) => {
+      if (!REL_ELEMENT_ID_PATTERN.test(relElementId)) {
+        throw new Error(`delete_relationship: invalid relElementId "${relElementId}"`);
+      }
+      const driver = await driverPromise;
+      const s = driver.session();
+      try {
+        await s.run(
+          `MATCH (u:User {id: $userId})-[r]->()
+           WHERE elementId(r) = $relId
+           DELETE r`,
+          { userId, relId: relElementId }
+        );
+        return { deleted: true };
+      } finally {
+        await s.close();
+      }
+    },
+  });
+}
+
 /**
  * Runs the three checks named directly in the sketch's "self correction loop" box:
  *   - "Relationships = not good relations"   -> duplicate-node detection
@@ -39,6 +152,8 @@ const DEFAULT_GENERIC_TYPES = ["RELATED_TO", "CONNECTED_TO", "LINKED_TO", "ASSOC
  * Diagnostics run as plain Cypher against the driver directly (cheap, deterministic,
  * no LLM call). A curator agent is only invoked — and only given the specific
  * findings, not the whole graph — when there's actually something to fix.
+ *
+ * The curator uses fixed, parameterized tools only — no raw Cypher from the model.
  */
 export async function runSelfCorrection(options: SelfCorrectionOptions): Promise<SelfCorrectionReport> {
   const {
@@ -71,7 +186,7 @@ export async function runSelfCorrection(options: SelfCorrectionOptions): Promise
     //    MERGE should prevent this, but case/whitespace drift or a bad write can still create dupes.
     const dupResult = await session.run(
       `MATCH (u:User {id: $userId})-[*1..2]-(n)
-       WHERE n.name IS NOT NULL
+       WHERE n.name IS NOT NULL AND n.ownerId = $userId
        WITH labels(n)[0] AS label, toLower(n.name) AS name, collect(DISTINCT n) AS nodes
        WHERE size(nodes) > 1
        RETURN label, name, size(nodes) AS cnt`,
@@ -124,52 +239,27 @@ export async function runSelfCorrection(options: SelfCorrectionOptions): Promise
     return report;
   }
 
-  // Curator agent gets the tool re-defined locally (bound to the same driver) rather than
-  // reusing memory.tool directly, so its description can be curation-specific instead of
-  // the write-oriented description the main memory agent uses.
-  const curatorTool = defineTool({
-    name: "execute_cypher_query",
-    description:
-      "Run a Cypher query to fix a specific graph problem you were told about. " +
-      "Use MATCH + MERGE/DELETE, never a blind rewrite of the whole graph.",
-    parameters: z.object({
-      query: z.string(),
-      params: z.record(z.any()).optional(),
-    }),
-     execute: async ({ query, params }: { query: string; params?: Record<string, unknown> }) => {
-       assertSafeCypher(query);
-       const s = driver.session();
-       try {
-         const result = await s.run(query, { ...(params ?? {}), userId });
-         return result.records.map((r) => r.toObject());
-       } finally {
-         await s.close();
-       }
-     },
-  });
+  // Curator uses fixed, parameterized tools only — all Cypher is anchored
+  // on (u:User {id: $userId}), userId bound server-side and never from model params.
+  const mergeDuplicates = createMergeDuplicateNodesTool(driverPromise, userId);
+  const renameRel = createRenameRelationshipTool(driverPromise, userId);
+  const deleteRel = createDeleteRelationshipTool(driverPromise, userId);
 
   const curatorAgent = defineAgent({
     name: "graph_curator",
     instructions: [
-      "You clean up a specific user's knowledge graph in Neo4j via execute_cypher_query.",
+      "You clean up a specific user's knowledge graph via three safe tools:",
+      "- merge_duplicate_nodes: merge duplicate Topic/Person/etc. nodes reachable from this user",
+      "- rename_relationship: recreate a generic-typed edge (e.g. RELATED_TO) with a specific type (e.g. LIKES)",
+      "- delete_relationship: delete one relationship by element ID (for pruning trivial facts)",
+      "",
       "You will be given a list of concrete problems found by diagnostics — fix only those,",
       "don't go looking for other things to change.",
-      "",
-      "For duplicate node groups: MATCH both/all nodes, pick the one with the most relationships",
-      "as the canonical node, rewire the others' relationships onto it, then delete the duplicates.",
-      "",
-      "For generic relationship types (e.g. RELATED_TO): look at what the relationship actually",
-      "connects and recreate it with a specific type (LIKES, WORKS_AT, INTERESTED_IN, etc.),",
-      "then delete the old generic-typed relationship.",
-      "",
-      "For 'too many relationships': find the least-recently-relevant or most trivial ones",
-      "(one-off mentions, not durable facts) and delete them — keep durable preferences,",
-      "relationships, and ongoing projects.",
       "",
       "When done, reply with a short plain-text summary of what you fixed.",
     ].join("\n"),
     model,
-    tools: [curatorTool],
+    tools: [mergeDuplicates, renameRel, deleteRel],
   });
 
   const findingsText = [

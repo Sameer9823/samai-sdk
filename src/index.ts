@@ -129,6 +129,7 @@ export type { SelfCorrectionOptions, SelfCorrectionReport } from "./graph-memory
 export { createFeedEngine } from "./graph-memory/feed-engine.js";
 export type { FeedEngine, FeedEngineOptions, FeedItem, GetFeedOptions } from "./graph-memory/feed-engine.js";
 
+export { assertSafeRawCypher } from "./graph-memory/cypher-guard.js";
 export { ensureGraphConstraints, deleteUserGraph } from "./graph-memory/admin.js";
 export type { DeleteUserGraphOptions, DeleteUserGraphResult } from "./graph-memory/admin.js";
 

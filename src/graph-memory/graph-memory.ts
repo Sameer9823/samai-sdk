@@ -3,7 +3,7 @@ import { defineAgent } from "../agent.js";
 import { runAgent } from "../run.js";
 import { z } from "zod";
 import { createUpsertFactTool } from "./fact-lifecycle.js";
-import { assertSafeCypher } from "./cypher-guard.js";
+import { assertSafeRawCypher } from "./cypher-guard.js";
 import type { MetricsCollector } from "./metrics.js";
 
 /**
@@ -91,11 +91,28 @@ export interface GraphMemoryOptions {
   windowSize?: number;
   /** optional shared metrics collector, see metrics.ts */
   metrics?: MetricsCollector;
+  /**
+   * Opt-in to the raw Cypher tool. When true, the memory agent also gets
+   * `execute_cypher_query` — but it runs READ-only sessions and rejects any
+   * mutation keywords. This is defence-in-depth, NOT tenant isolation;
+   * multi-tenant setups must enforce per-user isolation at the DB level.
+   * Default false.
+   */
+  unsafeRawCypher?: boolean;
 }
 
+/** Tools the memory agent always gets: upsert_fact + read + delete (all safe). */
+const TOOL_READ_USER_FACTS = "read_user_facts";
+const TOOL_DELETE_USER_FACT = "delete_user_fact";
+const TOOL_UPSERT_FACT = "upsert_fact";
+/** Opt-in raw Cypher tool (only when unsafeRawCypher: true). */
+const TOOL_EXECUTE_CYPHER = "execute_cypher_query";
+
 export interface GraphMemory {
-  /** the execute_cypher_query tool — pass this to your PRIVATE memory agent only, not the main chat agent */
-  tool: ToolDefinition<any, any>;
+  /** All tools available for this memory instance (fixed, parameterized + optional raw Cypher). */
+  tools: ToolDefinition<any, any>[];
+  /** The raw Cypher tool — only present when `unsafeRawCypher: true` was set; otherwise undefined. */
+  rawCypherTool?: ToolDefinition<any, any>;
   /**
    * Resolves to the underlying Neo4j driver. A promise (not a plain Driver)
    * because neo4j-driver is dynamically imported (see loadNeo4jDriver) — it
@@ -116,6 +133,121 @@ export interface GraphMemory {
   stop(): Promise<void>;
 }
 
+function createReadUserFactsTool(driverPromise: Promise<Neo4jDriver>, userId: string) {
+  return defineTool({
+    name: TOOL_READ_USER_FACTS,
+    description: [
+      "Read facts (relationships + connected object nodes) that originate from this user's node.",
+      "You cannot read another user's facts — all queries are anchored on (u:User {id: $userId}).",
+    ].join("\n"),
+    parameters: z.object({
+      relationType: z.string()
+        .optional()
+        .describe("If given, only read relationships of this exact type (e.g. LIKES, WORKS_AT)."),
+      objectName: z.string()
+        .optional()
+        .describe("If given, only read facts about this object name (e.g. 'hiking')."),
+      limit: z.number().int().max(50).optional().default(50).describe("Hard cap at 50 rows."),
+    }),
+    execute: async ({ relationType, objectName, limit = 50 }: {
+      relationType?: string;
+      objectName?: string;
+      limit?: number;
+    }) => {
+      const driver = await driverPromise;
+      const s = driver.session();
+      try {
+        const cappedLimit = Math.min(limit, 50);
+
+        let query = `MATCH (u:User {id: $userId})-[r]->(o)
+                    RETURN type(r) AS relationType, o.name AS objectName, labels(o) AS labels
+                    ORDER BY r.updatedAt DESC`;
+        const params: Record<string, unknown> = { userId, limit: cappedLimit };
+
+        if (relationType) {
+          query = query.replace(
+            "-[r]->(o)",
+            `-[r:${relationType}]->(o)`
+          );
+        }
+        if (objectName) {
+          query = query.replace(
+            "RETURN",
+            "WHERE o.name = $objectName RETURN"
+          );
+          params.objectName = objectName;
+        }
+        query += " LIMIT $limit";
+
+        const result = await s.run(query, params);
+        return result.records.map((r) => r.toObject());
+      } finally {
+        await s.close();
+      }
+    },
+  });
+}
+
+function createDeleteUserFactTool(driverPromise: Promise<Neo4jDriver>, userId: string) {
+  return defineTool({
+    name: TOOL_DELETE_USER_FACT,
+    description: [
+      "Delete a SINGLE relationship that starts at this user's node, identified by the",
+      "relationship's internal element ID. Only one relationship is ever deleted per call.",
+      "You cannot delete relationships belonging to another user.",
+    ].join("\n"),
+    parameters: z.object({
+      relElementId: z.string().describe("The element ID of the relationship to delete (from read_user_facts)."),
+    }),
+    execute: async ({ relElementId }: { relElementId: string }) => {
+      if (!relElementId || typeof relElementId !== "string" || !/^_[a-zA-Z0-9]+$/.test(relElementId)) {
+        throw new Error(`delete_user_fact: invalid relElementId "${relElementId}"`);
+      }
+      const driver = await driverPromise;
+      const s = driver.session();
+      try {
+        const result = await s.run(
+          `MATCH (u:User {id: $userId})-[r]->()
+           WHERE elementId(r) = $relId
+           DELETE r
+           RETURN count(r) AS deleted`,
+          { userId, relId: relElementId }
+        );
+        const deleted = result.records.length > 0 ? Number(result.records[0].get("deleted")) : 0;
+        return { deleted };
+      } finally {
+        await s.close();
+      }
+    },
+  });
+}
+
+function createExecuteCypherTool(driverPromise: Promise<Neo4jDriver>, userId: string) {
+  return defineTool({
+    name: TOOL_EXECUTE_CYPHER,
+    description: [
+      "Run a READ-ONLY Cypher query against this user's personal knowledge graph in Neo4j.",
+      "This is an escaped hatch — prefer upsert_fact / read_user_facts / delete_user_fact.",
+      "The query runs in a READ-only session and must reference $userId.",
+    ].join("\n"),
+    parameters: z.object({
+      query: z.string().describe("A read-only Cypher query, using $userId and any other named parameters"),
+      params: z.record(z.any()).optional().describe("Query parameters"),
+    }),
+    execute: async ({ query, params }: { query: string; params?: Record<string, unknown> }) => {
+      assertSafeRawCypher(query);
+      const driver = await driverPromise;
+      const s = driver.session();
+      try {
+        const result = await s.run(query, { ...(params ?? {}), userId });
+        return result.records.map((r) => r.toObject());
+      } finally {
+        await s.close();
+      }
+    },
+  });
+}
+
 /**
  * enableGraphMemory({ client, creds, userId, session }).build()
  *
@@ -124,6 +256,19 @@ export interface GraphMemory {
  *  - a background interval periodically sweeps recent conversation into the graph
  *  - the sweep's output becomes "running context" you inject into your main
  *    agent's system prompt on each turn (see with-running-context.ts)
+ *
+ * By default the memory agent only gets fixed, parameterized tools:
+ *   - upsert_fact   (write a subject-relation-object edge)
+ *   - read_user_facts (read the user's own facts, with optional filtering)
+ *   - delete_user_fact (delete one relationship by element ID)
+ * All Cypher in these tools is written by us — the model passes values, never
+ * query text — and every query is anchored on (u:User {id: $userId}) with
+ * userId bound server-side and never taken from model params.
+ *
+ * Set `unsafeRawCypher: true` to additionally get `execute_cypher_query`
+ * (READ-only, mutation keywords stripped/blocked). This is defence-in-depth,
+ * NOT tenant isolation — production multi-tenant setups must enforce
+ * isolation at the database level.
  */
 export function enableGraphMemory(options: GraphMemoryOptions): { build(): GraphMemory } {
   const {
@@ -135,6 +280,7 @@ export function enableGraphMemory(options: GraphMemoryOptions): { build(): Graph
     intervalMs = 3 * 60_000,
     windowSize = 20,
     metrics,
+    unsafeRawCypher = false,
   } = options;
 
   if (!options.creds && !options.driver) {
@@ -145,44 +291,24 @@ export function enableGraphMemory(options: GraphMemoryOptions): { build(): Graph
     ? Promise.resolve(options.driver)
     : loadNeo4jDriver(creds!);
 
-  const executeCypherQuery = defineTool({
-    name: "execute_cypher_query",
-    description: [
-      "Run a Cypher query against this user's personal knowledge graph in Neo4j.",
-      "Rules you must follow:",
-      "- Always MERGE, never blind CREATE — check whether a node already exists first.",
-      "- Anchor every query on this user's node: MERGE (u:User {id: $userId}).",
-      "- Prefer specific relationship types (LIKES, WORKS_AT, INTERESTED_IN) over one generic RELATED_TO.",
-      "- Skip trivial or one-off facts; only store things worth remembering next conversation.",
-    ].join("\n"),
-    parameters: z.object({
-      query: z.string().describe("A Cypher query, using $userId and any other named parameters"),
-      params: z.record(z.any()).optional().describe("Query parameters, e.g. { userId, topic: 'hiking' }"),
-    }),
-     execute: async ({ query, params }: { query: string; params?: Record<string, unknown> }) => {
-       assertSafeCypher(query);
-       const driver = await driverPromise;
-       const s = driver.session();
-       try {
-         const result = await s.run(query, { ...(params ?? {}), userId });
-         return result.records.map((r) => r.toObject());
-       } finally {
-         await s.close();
-       }
-     },
-  });
-
   const upsertFact = createUpsertFactTool(driverPromise, userId);
+  const readUserFacts = createReadUserFactsTool(driverPromise, userId);
+  const deleteUserFact = createDeleteUserFactTool(driverPromise, userId);
+
+  const defaultTools = [upsertFact, readUserFacts, deleteUserFact];
+  const rawCypherTool = unsafeRawCypher ? createExecuteCypherTool(driverPromise, userId) : undefined;
+  const allTools = rawCypherTool ? [...defaultTools, rawCypherTool] : defaultTools;
 
   const memoryAgent = defineAgent({
     name: "private_memory_agent",
     instructions: [
-      "You maintain a per-user knowledge graph in Neo4j via two tools:",
-      "- upsert_fact: use this for ordinary facts (preferences, relationships, projects).",
-      "  It timestamps automatically and can retire a contradicting old fact via `contradicts`",
-      "  (e.g. user now dislikes something they used to like: relation DISLIKES, contradicts: ['LIKES']).",
-      "- execute_cypher_query: only for things upsert_fact can't express (multi-hop queries,",
-      "  bulk operations). Prefer upsert_fact whenever the fact is a simple subject-relation-object.",
+      "You maintain a per-user knowledge graph in Neo4j via three safe, parameterized tools:",
+      "- upsert_fact: store a subject-relation-object fact (e.g. LIKES -> Topic(hiking)).",
+      "  Timestamps automatically. Use `contradicts` to retire a superseded relation type.",
+      "- read_user_facts: read the user's own facts (optionally filter by relation or name).",
+      "- delete_user_fact: delete ONE relationship by element ID.",
+      "All queries are anchored on (u:User {id: $userId}) — you cannot read or write",
+      "another user's graph. There is no raw Cypher tool available.",
       "",
       "You'll be given a slice of recent conversation. Decide what durable facts about the",
       "user are worth storing (preferences, relationships, ongoing projects, recurring topics)",
@@ -193,7 +319,7 @@ export function enableGraphMemory(options: GraphMemoryOptions): { build(): Graph
       "not a report of the steps you took.",
     ].join("\n"),
     model,
-    tools: [upsertFact, executeCypherQuery],
+    tools: allTools,
   });
 
   let runningContext = "";
@@ -227,7 +353,8 @@ export function enableGraphMemory(options: GraphMemoryOptions): { build(): Graph
   return {
     build(): GraphMemory {
       return {
-        tool: executeCypherQuery,
+        tools: allTools,
+        rawCypherTool,
         driverPromise,
         client,
         userId,

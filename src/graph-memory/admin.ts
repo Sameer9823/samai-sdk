@@ -20,7 +20,7 @@ import type { Neo4jDriver } from "./graph-memory.js";
 export async function ensureGraphConstraints(driver: Neo4jDriver): Promise<{ constraint: string; ok: boolean }[]> {
   const statements = [
     { name: "user_id_unique", cypher: "CREATE CONSTRAINT user_id_unique IF NOT EXISTS FOR (u:User) REQUIRE u.id IS UNIQUE" },
-    { name: "topic_name_unique", cypher: "CREATE CONSTRAINT topic_name_unique IF NOT EXISTS FOR (t:Topic) REQUIRE t.name IS UNIQUE" },
+    { name: "topic_owner_unique", cypher: "CREATE CONSTRAINT topic_owner_unique IF NOT EXISTS FOR (t:Topic) REQUIRE (t.name, t.ownerId) IS UNIQUE" },
     { name: "post_id_unique", cypher: "CREATE CONSTRAINT post_id_unique IF NOT EXISTS FOR (p:Post) REQUIRE p.id IS UNIQUE" },
   ];
 

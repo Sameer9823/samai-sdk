@@ -1,72 +1,90 @@
 /**
- * Best-effort, defence-in-depth guard for the `execute_cypher_query` tool, which
- * lets a language model run arbitrary Cypher against a per-user Neo4j graph.
+ * Defence-in-depth guard for the opt-in `unsafeRawCypher` path.
  *
- * THIS IS NOT A SANDBOX. A determined or confused model can still craft queries
- * that harm the user's own graph. Its job is to cheaply reject the common,
- * obviously-dangerous classes of query up-front:
+ * IMPORTANT: This is NOT a sandbox and NOT tenant isolation. A regex cannot
+ * make model-written Cypher safe — a determined model can always craft queries
+ * that read or mutate the wrong user's data in ways a regex won't catch.
  *
- *   - anything not anchored on `$userId` (would read/scatter across users)
- *   - `CALL` / `LOAD CSV` / `apoc.*` (can invoke sub-queries, read arbitrary
- *     files, or run arbitrary JVM code via apoc)
- *   - `DELETE`/`DETACH DELETE` that isn't anchored to the user's own node
- *     (a bare `MATCH (n) DELETE n` wipes a whole label)
+ * The real protection is architectural:
+ *   1. By DEFAULT, the memory agent only has fixed, parameterized tools
+ *      (upsert_fact, read_user_facts, delete_user_fact) — the model passes
+ *      values, never query text.
+ *   2. Raw Cypher is behind an explicit opt-in (`unsafeRawCypher: true`).
+ *      When enabled, sessions are READ-only and mutation keywords are blocked.
+ *   3. In multi-tenant deployments, isolation MUST be enforced at the database
+ *      level — a per-user database, or per-user Neo4j roles — never by hoping
+ *      a regex catches everything.
  *
- * For ordinary subject-relation-object facts, prefer `upsert_fact`, which issues
- * fixed, reviewable Cypher and never accepts a raw query string from the model.
+ * For the opt-in path, this module:
+ *   - Strips line and block comments before any scanning
+ *   - Strips string literals before mutation-keyword scanning (so a query cant
+ *     hide a MERGE inside a string literal)
+ *   - Rejects CREATE, MERGE, SET, DELETE, REMOVE, DROP, CALL, LOAD, FOREACH,
+ *     and apoc.* — the session also runs READ-only, so even if a mutation
+ *     somehow slips through the regex, Neo4j will refuse it.
+ *   - Verifies every :User node pattern is anchored on $userId (not a hardcoded
+ *     string ID or a bare :User) — this is best-effort and documented as such.
  */
 
-/** The query is only safe if it is scoped to this user via the $userId parameter. */
-const USER_ID_PARAM = /\$userId/i;
+const MUTATION_KEYWORDS = [
+  /\bCREATE\b/i,
+  /\bMERGE\b/i,
+  /\bSET\b/i,
+  /\bDELETE\b/i,
+  /\bREMOVE\b/i,
+  /\bDROP\b/i,
+  /\bCALL\b/i,
+  /\bLOAD\b/i,
+  /\bFOREACH\b/i,
+  /\bapoc\./i,
+];
 
-/** `CALL` sub-queries / procedures (including `apoc.*`, covered separately too). */
-const CALL_RE = /\bCALL\b/i;
+function stripComments(query: string): string {
+  let cleaned = query.replace(/\/\*[\s\S]*?\*\//g, " ");
+  cleaned = cleaned.replace(/\/\/[^\n]*/g, " ");
+  return cleaned;
+}
 
-/** `LOAD CSV ...` can read arbitrary files reachable from the DB server. */
-const LOAD_CSV_RE = /\bLOAD\s+CSV\b/i;
-
-/** `apoc.*` procedures can execute arbitrary code/IO on the server. */
-const APOC_RE = /\bapoc\./i;
-
-/** Any `DELETE` or `DETACH DELETE` (case-insensitive). */
-const DELETE_RE = /\b(?:DETACH\s+)?DELETE\b/i;
-
-/**
- * True when a DELETE is anchored to the current user's node, i.e. the graph is
- * walked *from* a `:User` node rather than matching a bare `(n)` and wiping it.
- * We look for the literal `:User` label (not just the substring "User", which
- * would also match `$userId`) together with the `$userId` parameter.
- */
-function isUserAnchored(query: string): boolean {
-  return /:User\b/i.test(query) && USER_ID_PARAM.test(query);
+function stripStringLiterals(query: string): string {
+  let cleaned = query.replace(/'[^']*'/g, " '' ");
+  cleaned = cleaned.replace(/"[^"]*"/g, " \"\" ");
+  cleaned = cleaned.replace(/`[^`]*`/g, " `` ");
+  return cleaned;
 }
 
 /**
- * Validates a model-supplied Cypher query before it runs against the user's
- * graph. Throws an `Error` with a human-readable reason if the query looks
- * dangerous; returns nothing if it's plausibly-scoped. See the module docs
- * above for why this is defence-in-depth, not a sandbox.
+ * Best-effort check: every :User node pattern must be anchored on $userId.
+ * Catches common cross-tenant read attacks:
+ *   MATCH (o:User) RETURN o          — bare :User, no id property
+ *   MATCH (v:User {id: 'victim'})    — :User with a hardcoded id
+ *
+ * This is a heuristic, not a guarantee. Database-level isolation is required
+ * for real multi-tenant safety.
  */
-export function assertSafeCypher(query: string): void {
-  if (!USER_ID_PARAM.test(query)) {
-    throw new Error(
-      "execute_cypher_query: query must reference $userId so it is scoped to this user's graph node."
-    );
+function assertUserAnchored(commentStripped: string): void {
+  const userNodeRe = /:User\s*([^)]*)\)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = userNodeRe.exec(commentStripped)) !== null) {
+    if (!/\$userId/i.test(match[1])) {
+      throw new Error(
+        "unsafeRawCypher: every :User node must be anchored with {id: $userId} — " +
+        "hardcoded IDs or bare :User matches are blocked."
+      );
+    }
   }
-  if (CALL_RE.test(query)) {
-    throw new Error(
-      "execute_cypher_query: CALL/sub-query procedures are blocked; use upsert_fact or a dedicated tool instead."
-    );
-  }
-  if (LOAD_CSV_RE.test(query)) {
-    throw new Error("execute_cypher_query: LOAD CSV is blocked — it can read arbitrary files.");
-  }
-  if (APOC_RE.test(query)) {
-    throw new Error("execute_cypher_query: apoc.* procedures are blocked.");
-  }
-  if (DELETE_RE.test(query) && !isUserAnchored(query)) {
-    throw new Error(
-      "execute_cypher_query: unanchored DELETE/DETACH DELETE is blocked. Anchor deletes on the user node, e.g. MATCH (u:User {id: $userId})-[...]->(n) DELETE n."
-    );
+}
+
+export function assertSafeRawCypher(query: string): void {
+  const noComments = stripComments(query);
+  assertUserAnchored(noComments);
+
+  const cleaned = stripStringLiterals(noComments);
+  for (const kw of MUTATION_KEYWORDS) {
+    if (kw.test(cleaned)) {
+      throw new Error(
+        "unsafeRawCypher: mutation keyword blocked (query must be read-only). " +
+        `Detected: ${kw.toString()}`
+      );
+    }
   }
 }
