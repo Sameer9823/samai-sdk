@@ -184,15 +184,18 @@ export function buildOpenAIStyleProvider(name: string, getClient: () => Promise<
       top_p: options.topP,
       stop: options.stopSequences,
       stream: true,
+      stream_options: { include_usage: true },
     });
 
     const toolCallBuffers: Record<number, { id: string; name: string; args: string }> = {};
     let finishReason: FinishReason = "unknown";
+    let finalUsage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null = null;
 
     for await (const chunk of response) {
       const delta = chunk.choices[0]?.delta;
       const rawFinish = chunk.choices[0]?.finish_reason;
       if (rawFinish) finishReason = mapOpenAIFinishReason(rawFinish);
+      if (chunk.usage) finalUsage = chunk.usage;
 
       if (delta?.content) {
         yield { type: "text-delta", textDelta: delta.content };
@@ -224,7 +227,9 @@ export function buildOpenAIStyleProvider(name: string, getClient: () => Promise<
     yield {
       type: "finish",
       finishReason,
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      usage: finalUsage
+        ? { inputTokens: finalUsage.prompt_tokens ?? 0, outputTokens: finalUsage.completion_tokens ?? 0, totalTokens: finalUsage.total_tokens ?? 0 }
+        : { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     };
   }
 

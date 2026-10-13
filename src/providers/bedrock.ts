@@ -11,6 +11,7 @@ import type {
 } from "../types.js";
 import { executeToolCalls } from "../tool-loop.js";
 import { toolParametersJsonSchema } from "../schema-adapter.js";
+import { base64ToBytes } from "../bytes.js";
 
 export interface BedrockProviderConfig {
   region?: string;
@@ -44,12 +45,16 @@ export function toBedrockMessages(messages: Message[]): any[] {
 
       const blocks = msg.content
         .map((p) => {
-          if (p.type === "text") return { text: p.text };
+          if (p.type === "text") {
+            // Drop empty text blocks (assistant tool-call turns produce {type:"text", text:""})
+            if (!p.text) return null;
+            return { text: p.text };
+          }
           if (p.type === "image") {
             // Bedrock's Converse API only accepts inline bytes, not URLs — callers must
             // pass base64 image data for Bedrock (a URL here would need fetching first).
             const format = (p.mimeType ?? "image/png").split("/")[1] ?? "png";
-            return { image: { format, source: { bytes: p.image } } };
+            return { image: { format, source: { bytes: base64ToBytes(p.image) } } };
           }
           if (p.type === "tool-call")
             return { toolUse: { toolUseId: p.toolCallId, name: p.toolName, input: p.args } };
@@ -65,8 +70,12 @@ export function toBedrockMessages(messages: Message[]): any[] {
         })
         .filter(Boolean);
 
+      // Drop messages that end up with no content blocks
+      if (blocks.length === 0) return null;
+
       return { role, content: blocks };
-    });
+    })
+    .filter(Boolean);
 }
 
 function mapBedrockFinishReason(reason: string | undefined): FinishReason {

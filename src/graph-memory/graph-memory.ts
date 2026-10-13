@@ -3,6 +3,7 @@ import { defineAgent } from "../agent.js";
 import { runAgent } from "../run.js";
 import { z } from "zod";
 import { createUpsertFactTool } from "./fact-lifecycle.js";
+import { assertSafeCypher } from "./cypher-guard.js";
 import type { MetricsCollector } from "./metrics.js";
 
 /**
@@ -158,16 +159,17 @@ export function enableGraphMemory(options: GraphMemoryOptions): { build(): Graph
       query: z.string().describe("A Cypher query, using $userId and any other named parameters"),
       params: z.record(z.any()).optional().describe("Query parameters, e.g. { userId, topic: 'hiking' }"),
     }),
-    execute: async ({ query, params }: { query: string; params?: Record<string, unknown> }) => {
-      const driver = await driverPromise;
-      const s = driver.session();
-      try {
-        const result = await s.run(query, { userId, ...(params ?? {}) });
-        return result.records.map((r) => r.toObject());
-      } finally {
-        await s.close();
-      }
-    },
+     execute: async ({ query, params }: { query: string; params?: Record<string, unknown> }) => {
+       assertSafeCypher(query);
+       const driver = await driverPromise;
+       const s = driver.session();
+       try {
+         const result = await s.run(query, { ...(params ?? {}), userId });
+         return result.records.map((r) => r.toObject());
+       } finally {
+         await s.close();
+       }
+     },
   });
 
   const upsertFact = createUpsertFactTool(driverPromise, userId);

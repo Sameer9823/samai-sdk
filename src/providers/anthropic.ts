@@ -51,7 +51,11 @@ function toAnthropicMessages(messages: Message[]): any[] {
 
       const blocks = msg.content
         .map((p) => {
-          if (p.type === "text") return { type: "text", text: p.text };
+          if (p.type === "text") {
+            // Drop empty text blocks (assistant tool-call turns produce {type:"text", text:""})
+            if (!p.text) return null;
+            return { type: "text", text: p.text };
+          }
           if (p.type === "image")
             return {
               type: "image",
@@ -72,10 +76,14 @@ function toAnthropicMessages(messages: Message[]): any[] {
         })
         .filter(Boolean);
 
+      // Drop messages that end up with no content blocks
+      if (blocks.length === 0) return null;
+
       // tool results are conceptually a "user" turn in Anthropic's API
       const role = msg.role === "tool" ? "user" : msg.role;
       return { role, content: blocks };
-    });
+    })
+    .filter(Boolean);
 }
 
 function mapFinishReason(reason: string | null | undefined): FinishReason {
@@ -174,12 +182,14 @@ export function anthropic(config: AnthropicProviderConfig = {}): Provider {
     });
 
     const toolCallBuffers: Record<number, { id: string; name: string; args: string }> = {};
+    let inputTokens = 0;
     let cacheWriteTokens: number | undefined;
     let cacheReadTokens: number | undefined;
 
     for await (const event of response) {
       if (event.type === "message_start") {
         const usage = (event.message as any)?.usage;
+        inputTokens = usage?.input_tokens ?? 0;
         cacheWriteTokens = usage?.cache_creation_input_tokens ?? undefined;
         cacheReadTokens = usage?.cache_read_input_tokens ?? undefined;
       }
@@ -215,13 +225,14 @@ export function anthropic(config: AnthropicProviderConfig = {}): Provider {
             };
           }
         }
+        const outputTokens = (event.usage as any)?.output_tokens ?? 0;
         yield {
           type: "finish",
           finishReason,
           usage: {
-            inputTokens: 0,
-            outputTokens: (event.usage as any)?.output_tokens ?? 0,
-            totalTokens: (event.usage as any)?.output_tokens ?? 0,
+            inputTokens,
+            outputTokens,
+            totalTokens: inputTokens + outputTokens,
             cacheWriteTokens,
             cacheReadTokens,
           },

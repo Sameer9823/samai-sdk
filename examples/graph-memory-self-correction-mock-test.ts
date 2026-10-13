@@ -37,7 +37,12 @@ const mock = createMockProvider({
   responses: [
     {
       toolCalls: [
-        { toolName: "execute_cypher_query", args: { query: "MATCH (a:Topic {name:'Kyoto Trip'}), (b:Topic {name:'kyoto trip'}) DETACH DELETE b" } },
+        {
+          toolName: "execute_cypher_query",
+          // Anchored on the user node — the defence-in-depth cypher guard rejects deletes
+          // that aren't, so the curator is modeled writing a scoped fix here.
+          args: { query: "MATCH (u:User {id: $userId})-[:ALIAS]->(b:Topic {name:'kyoto trip'}) DETACH DELETE b" },
+        },
       ],
     },
     { text: "Merged 2 duplicate Topic nodes, renamed 12 RELATED_TO edges to specific types." },

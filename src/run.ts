@@ -51,6 +51,11 @@ export interface RunAgentOptions {
    * can inspect it or resume past the failure point.
    */
   checkpoint?: { store: RunCheckpointStore; runId?: string };
+  /**
+   * Arbitrary metadata attached to the run. Passed to the client's `stream()` call
+   * so usage ledgers and other middleware can attribute costs to a user, session, etc.
+   */
+  metadata?: Record<string, unknown>;
 }
 
 export interface RunResult<TOutput = string> {
@@ -183,6 +188,7 @@ async function* runLoop<TOutput>(
         tools,
         maxToolRoundtrips: 1,
         signal: options.signal,
+        metadata: options.metadata,
         onRetry: (info) => {
           const error = info.error instanceof Error ? info.error.message : String(info.error);
           recordEvent(trace, { type: "retry", agentName: currentAgent.name, attempt: info.attempt, delayMs: info.delayMs, error });
@@ -261,6 +267,25 @@ async function* runLoop<TOutput>(
             },
           ],
         });
+
+        // Item 18: When a handoff shares a turn with other tool calls,
+        // those other calls get no tool result -> provider 400 on next turn.
+        // Append error-flagged tool results for every other tool call in this turn.
+        for (const otherCall of toolCalls) {
+          if (otherCall.toolCallId === handoffCall.toolCallId) continue;
+          messages.push({
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: otherCall.toolCallId,
+                toolName: otherCall.toolName,
+                result: `Skipped: handed off to ${target.name}`,
+                isError: true,
+              },
+            ],
+          });
+        }
 
         visitedAgents.add(target.name);
         trace.agentPath.push(target.name);
@@ -356,6 +381,31 @@ async function* runLoop<TOutput>(
           const reason = outcome.reason ?? "unspecified";
           recordEvent(trace, { type: "guardrail-triggered", stage: "output", agentName: currentAgent.name, reason });
           yield { type: "guardrail-triggered", stage: "output", agentName: currentAgent.name, reason };
+          throw new GuardrailBlockedError(reason, "output");
+        }
+        if (outcome.modifiedResult) {
+          if (outcome.modifiedResult.object !== undefined) output = outcome.modifiedResult.object as TOutput;
+          if (outcome.modifiedResult.text !== undefined) text = outcome.modifiedResult.text;
+        }
+      }
+
+      // --- client-level output guardrails (e.g. budget, blocklist) ---
+      for (const guardrail of client.outputGuardrails) {
+        const dummyResult: GenerateResult = {
+          model: currentAgent.model,
+          text,
+          toolCalls: [],
+          finishReason: "stop",
+          usage: trace.totalUsage,
+          messages,
+          raw: null,
+          object: output,
+        };
+        const outcome = await guardrail({ result: dummyResult });
+        if (!outcome.allowed) {
+          const reason = outcome.reason ?? "unspecified";
+          recordEvent(trace, { type: "guardrail-triggered", stage: "output", agentName: "client", reason });
+          yield { type: "guardrail-triggered", stage: "output", agentName: "client", reason };
           throw new GuardrailBlockedError(reason, "output");
         }
         if (outcome.modifiedResult) {

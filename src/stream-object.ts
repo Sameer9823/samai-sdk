@@ -163,7 +163,7 @@ export function streamObject<T>(client: Client, options: StreamObjectOptions<T>)
 
   return {
     partialObjectStream: queue.iterable,
-    object: objectDeferred.promise,
-    usage: usageDeferred.promise,
+    object: objectDeferred.promise.catch(() => {}),
+    usage: usageDeferred.promise.catch(() => {}),
   };
 }

@@ -236,7 +236,7 @@ Examples:
 async function runTrace(traceFilePath: string, port: number): Promise<void> {
   let raw: string;
   try {
-    raw = await readFile(join(process.cwd(), traceFilePath), "utf-8");
+    raw = await readFile(resolve(traceFilePath), "utf-8");
   } catch (err) {
     console.error(`✖ Could not read "${traceFilePath}": ${err instanceof Error ? err.message : err}`);
     process.exitCode = 1;
@@ -272,7 +272,7 @@ async function runTrace(traceFilePath: string, port: number): Promise<void> {
 
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(port, resolve);
+    server.listen(port, "127.0.0.1", resolve);
   });
 
   console.log(`✅ Trace viewer running at http://localhost:${port}`);

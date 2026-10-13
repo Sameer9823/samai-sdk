@@ -63,7 +63,7 @@ export function createClient(opts: ClientOptions) {
     yield* opts.provider.stream({ ...options, messages });
   }
 
-  return { generate, stream, provider: opts.provider };
+  return { generate, stream, provider: opts.provider, outputGuardrails: opts.outputGuardrails ?? [] };
 }
 
 export type Client = ReturnType<typeof createClient>;

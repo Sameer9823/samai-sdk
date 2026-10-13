@@ -94,7 +94,16 @@ function spawnAndCollect(
   opts: { cwd: string; env: Record<string, string>; timeoutMs: number; maxOutputBytes: number }
 ): Promise<SandboxRunResult> {
   return new Promise<SandboxRunResult>((resolvePromise) => {
-    const child = spawn(command, args, { cwd: opts.cwd, env: opts.env, stdio: ["ignore", "pipe", "pipe"] });
+    const isWindows = process.platform === "win32";
+    const child = spawn(command, args, {
+      cwd: opts.cwd,
+      env: opts.env,
+      stdio: ["ignore", "pipe", "pipe"],
+      // Use detached:true so the child becomes a process group leader.
+      // On timeout we can then kill the whole group (non-Windows) to catch
+      // grandchildren like `bash -c "sleep 6 & wait"`.
+      detached: !isWindows,
+    });
 
     let stdout = "";
     let stderr = "";
@@ -106,7 +115,14 @@ function spawnAndCollect(
 
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGKILL");
+      if (isWindows) {
+        child.kill("SIGKILL");
+      } else {
+        // Kill the whole process group (negative PID = group) to reap
+        // grandchildren like `bash -c "sleep 6 & wait"`.
+        // child.pid is guaranteed to be set by the time the timeout fires.
+        process.kill(-child.pid!, "SIGKILL");
+      }
     }, opts.timeoutMs);
 
     child.stdout?.on("data", (chunk: Buffer) => {

@@ -89,11 +89,16 @@ if (trBlock.toolResult.status !== "success") throw new Error("toolResult status 
 if (trBlock.toolResult.content[0].text !== "18C and cloudy") throw new Error("toolResult content text not preserved");
 
 const imageMsg = bedrockMsgs[3];
-const imgBlock = imageMsg.content.find((b: any) => b.image);
-console.log(`  [3] image part -> format "${imgBlock?.image?.format}" (expected "png")`);
-if (!imgBlock) throw new Error("image part did not convert to an image block");
-if (imgBlock.image.format !== "png") throw new Error("image format not derived correctly from mimeType");
-if (imgBlock.image.source.bytes !== "aGVsbG8=") throw new Error("image bytes not preserved");
+  const imgBlock = imageMsg.content.find((b: any) => b.image);
+  console.log(`  [3] image part -> format "${imgBlock?.image?.format}" (expected "png")`);
+  if (!imgBlock) throw new Error("image part did not convert to an image block");
+  if (imgBlock.image.format !== "png") throw new Error("image format not derived correctly from mimeType");
+  // Item 17 fix: image bytes should be converted from base64 to Uint8Array
+  if (!(imgBlock.image.source.bytes instanceof Uint8Array)) throw new Error("image bytes should be Uint8Array");
+  const expectedBytes = new TextEncoder().encode("hello");
+  if (!imgBlock.image.source.bytes.every((b: number, i: number) => b === expectedBytes[i])) {
+    throw new Error("image bytes not correctly decoded from base64");
+  }
 
 // isError: true should map to status "error"
 const errMsgs = toBedrockMessages([

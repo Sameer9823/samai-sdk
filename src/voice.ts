@@ -13,9 +13,10 @@
 // server-event aliases from the retired preview protocol are still accepted on input, because
 // Azure's own realtime endpoint emits them; nothing is ever *sent* in the retired shape. It still
 // has not been exercised against a live key, so test it before shipping.
-import type { ToolDefinition } from "./types.js";
+import type { ToolDefinition, ToolResultPart, ToolCallPart } from "./types.js";
 import { toolParametersJsonSchema } from "./schema-adapter.js";
 import { base64ToBytes, bytesToBase64, type BinaryLike } from "./bytes.js";
+import { executeToolCalls } from "./tool-loop.js";
 
 // ---------- Text-to-speech ----------
 
@@ -225,22 +226,25 @@ export interface RealtimeSessionOptions {
   instructions?: string;
   /**
    * Tools available to the model during the session. When a tool call comes in, it's executed
-   * automatically (via each `ToolDefinition.execute()`) and the result is sent back to continue
-   * the response — you don't need to handle `tool_call` events yourself unless you want to
-   * observe them (they're still emitted, informationally, alongside the auto-execution).
+   * via `executeToolCalls()` (zod validation, guardrails, approval, timeout) and the result is
+   * sent back to continue the response — you don't need to handle `tool_call` events yourself
+   * unless you want to observe them (they're still emitted, informationally, alongside the
+   * auto-execution).
    */
   tools?: ToolDefinition[];
   /**
-   * Turn detection config, or `null` to disable it (manual turn-taking — you decide when to call
+   * Optional handler for tool calls that declare `requiresApproval: true`.
+   * Return `true` to allow the tool to execute, `false` to reject it with an error result.
+   * If omitted, approval-gated tools fail closed (are rejected by default).
+   */
+  onApprovalRequest?: (info: { agentName: string; toolName: string; args: unknown }) => boolean | Promise<boolean>;
+  /** Turn detection config, or `null` to disable it (manual turn-taking — you decide when to call
    * `commitAudio()`). Default: `semantic_vad` with OpenAI's defaults, which is what makes natural
-   * turn-taking and barge-in work without a push-to-talk button.
-   */
+   * turn-taking and barge-in work without a push-to-talk button. */
   turnDetection?: RealtimeTurnDetection | null;
-  /**
-   * Input-audio transcription config. Required to receive
+  /** Input-audio transcription config. Required to receive
    * `conversation.item.input_audio_transcription.*` events (and therefore user transcripts).
-   * Pass `null` to disable transcription of the user's audio. Default: `{ model: "gpt-4o-transcribe" }`.
-   */
+   * Pass `null` to disable transcription of the user's audio. Default: `{ model: "gpt-4o-transcribe" }`. */
   inputAudioTranscription?: RealtimeInputTranscription | null;
   /** Input audio encoding sent via `sendAudio()`. Default: "pcm16" (24kHz, mono, little-endian). */
   inputAudioFormat?: RealtimeAudioEncoding;
@@ -476,7 +480,6 @@ export function createRealtimeSession(options: RealtimeSessionOptions = {}): Rea
   const outputFormat = options.outputAudioFormat ?? "pcm16";
 
   const listeners = new Set<(event: RealtimeEvent) => void>();
-  const toolsByName = new Map((options.tools ?? []).map((t) => [t.name, t]));
 
   let ws: WebSocketLike | null = null;
   let connectionState: RealtimeConnectionState = "connecting";
@@ -520,20 +523,24 @@ export function createRealtimeSession(options: RealtimeSessionOptions = {}): Rea
   async function handleFunctionCall(name: string, callId: string, argsJson: string): Promise<void> {
     if (callId && handledCallIds.has(callId)) return;
     if (callId) handledCallIds.add(callId);
-    const tool = toolsByName.get(name);
-    let output: string;
-    if (!tool) {
-      output = JSON.stringify({ error: `No tool named "${name}" is registered on this session.` });
-    } else {
-      try {
-        const args = JSON.parse(argsJson || "{}");
-        emit({ type: "tool_call", name, args, callId });
-        const result = await tool.execute(args);
-        output = typeof result === "string" ? result : JSON.stringify(result);
-      } catch (err) {
-        output = JSON.stringify({ error: err instanceof Error ? err.message : String(err) });
-      }
-    }
+
+    const toolCalls: ToolCallPart[] = [{
+      type: "tool-call",
+      toolCallId: callId,
+      toolName: name,
+      args: JSON.parse(argsJson || "{}"),
+    }];
+
+    emit({ type: "tool_call", name, args: toolCalls[0].args, callId });
+
+    const results = await executeToolCalls(toolCalls, options.tools ?? [], {
+      onApprovalRequest: options.onApprovalRequest,
+      agentName: "realtime-session",
+    });
+
+    const result = results[0];
+    const output = typeof result.result === "string" ? result.result : JSON.stringify(result.result);
+
     sendQuiet({
       type: "conversation.item.create",
       item: { type: "function_call_output", call_id: callId, output },

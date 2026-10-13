@@ -2,6 +2,7 @@ import { defineTool } from "../types.js";
 import { defineAgent } from "../agent.js";
 import { runAgent } from "../run.js";
 import { z } from "zod";
+import { assertSafeCypher } from "./cypher-guard.js";
 import type { GraphMemory, Neo4jDriver } from "./graph-memory.js";
 import type { MetricsCollector } from "./metrics.js";
 
@@ -135,15 +136,16 @@ export async function runSelfCorrection(options: SelfCorrectionOptions): Promise
       query: z.string(),
       params: z.record(z.any()).optional(),
     }),
-    execute: async ({ query, params }: { query: string; params?: Record<string, unknown> }) => {
-      const s = driver.session();
-      try {
-        const result = await s.run(query, { userId, ...(params ?? {}) });
-        return result.records.map((r) => r.toObject());
-      } finally {
-        await s.close();
-      }
-    },
+     execute: async ({ query, params }: { query: string; params?: Record<string, unknown> }) => {
+       assertSafeCypher(query);
+       const s = driver.session();
+       try {
+         const result = await s.run(query, { ...(params ?? {}), userId });
+         return result.records.map((r) => r.toObject());
+       } finally {
+         await s.close();
+       }
+     },
   });
 
   const curatorAgent = defineAgent({
