@@ -8,55 +8,54 @@ While the project is pre-1.0, minor version bumps (0.X.0) may include
 breaking changes — these are called out explicitly below. Patch versions
 (0.3.X) will not.
 
-## [Unreleased]
-
-### Added
-- Graph memory: per-user long-term memory backed by a Neo4j knowledge graph
-  (`enableGraphMemory()`), with a private memory agent that writes facts via
-  `upsert_fact` (timestamped, contradiction-aware — `applyRecencyDecay()`
-  fades and prunes stale ones) and a background sweep that produces running
-  context for the main agent (`chatWithMemory()`)
-- `createGraphMemoryManager()` — shares a single Neo4j driver/connection pool
-  across many users instead of one per user
-- `runSelfCorrection()` / `startSelfCorrectionLoop()` — Cypher diagnostics for
-  duplicate nodes, overly generic relationship types, and relationship-count
-  overload, with a curator agent invoked only when there's something to fix
-- `createFeedEngine()` — hybrid social-graph + interest-graph + engagement
-  content ranking
-- `ensureGraphConstraints()` / `deleteUserGraph()` — DB-level uniqueness
-  constraints and a real right-to-be-forgotten function
-- `createMetricsCollector()` — shared observability across all of the above
-- `neo4j-driver` optional peer dependency (dynamically imported, same pattern
-  as `ioredis`/`better-sqlite3` — the rest of the SDK is unaffected if it's
-  not installed)
+## [0.4.0] - 2026-10-13
 
 ### Changed
--
+- **Graph memory isolation**: `read_user_facts` and `delete_user_fact` replace
+  `execute_cypher_query` in the default tool set — both are parameterized and
+  always anchored on the `:User` node, so a memory agent can never read or mutate
+  another user's data
+- **Per-user object nodes**: `upsert_fact` now MERGEs object nodes with a
+  per-user `ownerId` property, so two users with the same fact name get
+  distinct nodes (no cross-user leakage in the graph)
+- **Curator uses fixed tools**: `runSelfCorrection()` now invokes its curator
+  agent with `merge_duplicate_nodes`, `rename_relationship`, and
+  `delete_relationship` instead of raw Cypher
+- `feedEngine.recordLike()` now uses `ON CREATE SET p.likes = 1` so the
+  engagement counter is initialised correctly for first-time likers
+- `response-shaping.ts`: escaped `\$` in template literals so `$` interpolates
+  correctly in WebRTC session config
+- Deepgram and ElevenLabs STT/TTS providers now require an explicit API key
+  at config time (or `apiKey: "mock"` for tests) instead of silently falling
+  back to `process.env` at call time; `connect()` rejects on missing credential
+  rather than returning a fake session
+- `openaiRealtime().connect()` now rejects with a clear error when no API key,
+  client secret, or `getEphemeralKey` is configured, instead of returning a
+  mock session
+
+### Breaking changes
+- `execute_cypher_query` is removed from the default graph-memory tool set;
+  use the opt-in `unsafeRawCypher` tool (read-only sessions, comment/string
+  stripping, mutation blocking, `:User` anchoring) when raw queries are truly
+  needed
+- `upsert_fact` MERGEs object nodes per-user — existing cross-user shared
+  nodes will be split into per-user copies on first upsert
+
+### Added
+- `assertSafeRawCypher()` — exported from `samai-sdk`; guards raw Cypher with
+  read-only sessions, comment/string stripping, mutation keyword blocking, and
+  mandatory `:User` anchoring
 
 ### Fixed
-- `streamObject()`: awaiting only `object` or only `usage` on a deferred stream
-  no longer produces an `unhandledRejection` or resolves to `undefined`; the
-  unawaited promise is still marked handled, but the awaited one still rejects
-  with the provider error (0.3.6 regression in the deferred-promise refactor)
-- `handleFunctionCall()` in the realtime voice layer: malformed `arguments`
-  JSON from the model is now caught and emitted as a `function_call_output`
-  error block instead of crashing the session with an unhandled rejection
-- `createSandbox()` timeout handler: `process.kill` on a process-group PID no
-  longer throws `ESRCH` when the child has already exited (race condition)
-- PII guardrail (`rewriteMessage`): each text part of a structured
-  multi-part message is now redacted independently instead of applying a single
-  joined redaction across all parts, preserving image and tool-call content
-- Cypher guard (`assertSafeCypher`): model-supplied `$userId` params can no
-  longer override the bound user id; queries without `$userId`,
-  `CALL`/sub-query procedures, `LOAD CSV`, `apoc.*`, and unanchored
-  `DELETE`/`DETACH DELETE` are all rejected before reaching the driver
-- Tests: handle `EPERM` during SQLite session store cleanup on Windows;
-  fall back to file copy when symlinks aren't available in the CLI scaffold
-  test; skip bash/python tests in `sandbox-usage-test` on Windows when
-  `/bin/bash` isn't available
-- `.gitattributes` adds `* text=auto eol=lf` and normalizes line endings
+- `openaiRealtime({ apiKey: "mock" })`: the WebSocket data-channel handler now
+  accumulates `response.function_call_arguments.done`, executes the tool via
+  `executeToolCalls` with approval gating, and sends `function_call_output`
+  back on the data channel — restoring WebRTC tool-call support from the GA
+  preview
+- Deepgram and ElevenLabs providers: `process.env` access is now guarded by
+  `typeof process !== "undefined"` so the voice bundle stays browser-safe
+  (`check:browser` passes)
 
-## [0.3.7] - 2026-10-13
 
 ## [0.3.7] - 2026-10-13
 
