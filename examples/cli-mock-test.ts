@@ -80,8 +80,25 @@ if (!refusedDuplicate) throw new Error("CLI should have refused to scaffold into
 // generated code isn't just plausible-looking text, it's valid TypeScript against the actual
 // published type surface (dist/index.d.ts), not a hand-wavy string template.
 mkdirSync(join(projectDir, "node_modules"), { recursive: true });
-symlinkSync(repoRoot, join(projectDir, "node_modules", "samai-sdk"));
-symlinkSync(join(repoRoot, "node_modules", "zod"), join(projectDir, "node_modules", "zod"));
+
+// Symlink to the SDK source so the scaffolded project can resolve "samai-sdk"
+// against the real built types. On Windows (and some CI), symlinks require
+// elevated privileges, so fall back to a copy if symlink fails.
+const linkTarget = join(projectDir, "node_modules", "samai-sdk");
+try {
+  symlinkSync(repoRoot, linkTarget);
+} catch {
+  // Fall back: copy dist and package.json (so TypeScript module resolution works)
+  const { cpSync, copyFileSync } = await import("node:fs");
+  cpSync(join(repoRoot, "dist"), join(linkTarget, "dist"), { recursive: true });
+  copyFileSync(join(repoRoot, "package.json"), join(linkTarget, "package.json"));
+}
+try {
+  symlinkSync(join(repoRoot, "node_modules", "zod"), join(projectDir, "node_modules", "zod"));
+} catch {
+  const { cpSync } = await import("node:fs");
+  cpSync(join(repoRoot, "node_modules", "zod"), join(projectDir, "node_modules", "zod"), { recursive: true });
+}
 
 execFileSync(
   "node",
