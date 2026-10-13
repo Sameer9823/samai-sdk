@@ -524,11 +524,25 @@ export function createRealtimeSession(options: RealtimeSessionOptions = {}): Rea
     if (callId && handledCallIds.has(callId)) return;
     if (callId) handledCallIds.add(callId);
 
+    let parsedArgs: unknown;
+    try {
+      parsedArgs = JSON.parse(argsJson || "{}");
+    } catch {
+      // Emit a function_call_output with an error result so the model knows
+      // the arguments were invalid, rather than silently dropping the turn.
+      sendQuiet({
+        type: "conversation.item.create",
+        item: { type: "function_call_output", call_id: callId, output: JSON.stringify({ error: "Invalid tool arguments JSON" }) },
+      });
+      sendQuiet({ type: "response.create" });
+      return;
+    }
+
     const toolCalls: ToolCallPart[] = [{
       type: "tool-call",
       toolCallId: callId,
       toolName: name,
-      args: JSON.parse(argsJson || "{}"),
+      args: (parsedArgs as Record<string, unknown>) ?? {},
     }];
 
     emit({ type: "tool_call", name, args: toolCalls[0].args, callId });
@@ -638,12 +652,16 @@ export function createRealtimeSession(options: RealtimeSessionOptions = {}): Rea
 
       // --- function calling. Both events carry the same call; handledCallIds de-dupes. ---
       case "response.function_call_arguments.done":
-        void handleFunctionCall(msg.name as string, msg.call_id as string, msg.arguments as string);
+        void handleFunctionCall(msg.name as string, msg.call_id as string, msg.arguments as string).catch((err) => {
+          emit({ type: "error", error: err });
+        });
         break;
       case "response.output_item.done": {
         noteAssistantItem(msg.item);
         const call = asFunctionCall(msg.item);
-        if (call) void handleFunctionCall(call.name, call.callId, call.args);
+        if (call) void handleFunctionCall(call.name, call.callId, call.args).catch((err) => {
+          emit({ type: "error", error: err });
+        });
         break;
       }
       case "response.output_item.added":
