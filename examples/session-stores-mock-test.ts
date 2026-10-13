@@ -36,7 +36,14 @@ const afterClear = await sqliteStoreB.getMessages("user-42");
 console.log(`  after clear(): ${afterClear.length} messages (expected 0)`);
 if (afterClear.length !== 0) throw new Error("clear() did not remove the session row");
 
-rmSync(dbPath, { force: true });
+try {
+  rmSync(dbPath, { force: true });
+} catch {
+  // On some Windows versions, better-sqlite3 retains a handle briefly after all
+  // store instances are dereferenced, causing EPERM. Retry after a short delay.
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  try { rmSync(dbPath, { force: true }); } catch { /* best-effort cleanup */ }
+}
 console.log("✅ TEST 1 passed (real better-sqlite3, real file on disk)\n");
 
 // ===========================================================================
