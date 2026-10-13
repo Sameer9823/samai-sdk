@@ -13,6 +13,8 @@ import { existsSync } from "node:fs";
 import { createSandbox } from "../src/sandbox.js";
 import { createCodeExecutionTool, createSandboxTools } from "../src/tools/code-execution.js";
 
+const hasBash = existsSync("/bin/bash");
+
 let failures = 0;
 function check(label: string, condition: boolean) {
   if (condition) {
@@ -21,6 +23,10 @@ function check(label: string, condition: boolean) {
     console.log(`  ❌ ${label}`);
     failures++;
   }
+}
+
+function skip(label: string, reason: string) {
+  console.log(`  ⏭️  ${label} (skipped: ${reason})`);
 }
 
 async function testCore() {
@@ -34,31 +40,53 @@ async function testCore() {
   check("javascript execution captures stdout", js.stdout.trim() === "hi from js 2");
   check("javascript execution exits 0", js.exitCode === 0);
 
-  const py = await sandbox.runCode({ language: "python", code: "print('hi from python', 1 + 1)" });
-  console.log(`  py -> ${JSON.stringify(py)}`);
-  check("python execution captures stdout", py.stdout.trim() === "hi from python 2");
+  if (hasBash) {
+    const py = await sandbox.runCode({ language: "python", code: "print('hi from python', 1 + 1)" });
+    console.log(`  py -> ${JSON.stringify(py)}`);
+    check("python execution captures stdout", py.stdout.trim() === "hi from python 2");
 
-  const bash = await sandbox.runCode({ language: "bash", code: "echo hi from bash && pwd" });
-  console.log(`  bash -> ${JSON.stringify(bash)}`);
-  check("bash execution captures stdout", bash.stdout.includes("hi from bash"));
-  check("bash cwd is the sandbox dir", bash.stdout.includes(sandbox.dir));
+    const bash = await sandbox.runCode({ language: "bash", code: "echo hi from bash && pwd" });
+    console.log(`  bash -> ${JSON.stringify(bash)}`);
+    check("bash execution captures stdout", bash.stdout.includes("hi from bash"));
+    check("bash cwd is the sandbox dir", bash.stdout.includes(sandbox.dir));
 
-  const stderrCase = await sandbox.runCode({ language: "bash", code: "echo oops 1>&2; exit 3" });
-  check("nonzero exit code is captured", stderrCase.exitCode === 3);
-  check("stderr is captured", stderrCase.stderr.includes("oops"));
+    const stderrCase = await sandbox.runCode({ language: "bash", code: "echo oops 1>&2; exit 3" });
+    check("nonzero exit code is captured", stderrCase.exitCode === 3);
+    check("stderr is captured", stderrCase.stderr.includes("oops"));
 
-  // Timeout: a real sleep that actually gets killed.
-  const start = Date.now();
-  const timeout = await sandbox.runCode({ language: "bash", code: "sleep 10", timeoutMs: 500 });
-  const elapsed = Date.now() - start;
-  console.log(`  timeout case took ${elapsed}ms, result: ${JSON.stringify(timeout)}`);
-  check("timeout is enforced (process killed well under 10s)", elapsed < 5000);
-  check("timedOut flag is set", timeout.timedOut === true);
+    // Timeout: a real sleep that actually gets killed.
+    const start = Date.now();
+    const timeout = await sandbox.runCode({ language: "bash", code: "sleep 10", timeoutMs: 500 });
+    const elapsed = Date.now() - start;
+    console.log(`  timeout case took ${elapsed}ms, result: ${JSON.stringify(timeout)}`);
+    check("timeout is enforced (process killed well under 10s)", elapsed < 5000);
+    check("timedOut flag is set", timeout.timedOut === true);
 
-  // Truncation: maxOutputBytes was set to 50 above.
-  const bigOutput = await sandbox.runCode({ language: "bash", code: "for i in $(seq 1 200); do echo line$i; done" });
-  check("large output gets truncated", bigOutput.truncated === true);
-  check("truncated output is capped near the byte limit", bigOutput.stdout.length < 500);
+    // Truncation: maxOutputBytes was set to 50 above.
+    const bigOutput = await sandbox.runCode({ language: "bash", code: "for i in $(seq 1 200); do echo line$i; done" });
+    check("large output gets truncated", bigOutput.truncated === true);
+    check("truncated output is capped near the byte limit", bigOutput.stdout.length < 500);
+
+    // Env isolation: a secret in this test process's env should NOT reach executed code.
+    process.env.SAMAI_TEST_SECRET = "super-secret-value";
+    const envCheck = await sandbox.runCode({
+      language: "bash",
+      code: "echo \"secret=[$SAMAI_TEST_SECRET]\"",
+    });
+    console.log(`  env isolation check -> ${JSON.stringify(envCheck.stdout)}`);
+    check("parent process env vars are NOT inherited by executed code", !envCheck.stdout.includes("super-secret-value"));
+    delete process.env.SAMAI_TEST_SECRET;
+  } else {
+    skip("python execution captures stdout", "/bin/bash not available (Windows)");
+    skip("bash execution captures stdout", "/bin/bash not available (Windows)");
+    skip("bash cwd is the sandbox dir", "/bin/bash not available (Windows)");
+    skip("nonzero exit code is captured", "/bin/bash not available (Windows)");
+    skip("stderr is captured", "/bin/bash not available (Windows)");
+    skip("timeout is enforced", "/bin/bash not available (Windows)");
+    skip("timedOut flag is set", "/bin/bash not available (Windows)");
+    skip("large output gets truncated", "/bin/bash not available (Windows)");
+    skip("parent process env vars are NOT inherited by executed code", "/bin/bash not available (Windows)");
+  }
 
   // Files.
   await sandbox.writeFile("greeting.txt", "hello sandbox");
@@ -98,16 +126,6 @@ async function testCore() {
     absoluteBlocked = true;
   }
   check("writing to an absolute path outside the sandbox is rejected", absoluteBlocked);
-
-  // Env isolation: a secret in this test process's env should NOT reach executed code.
-  process.env.SAMAI_TEST_SECRET = "super-secret-value";
-  const envCheck = await sandbox.runCode({
-    language: "bash",
-    code: "echo \"secret=[$SAMAI_TEST_SECRET]\"",
-  });
-  console.log(`  env isolation check -> ${JSON.stringify(envCheck.stdout)}`);
-  check("parent process env vars are NOT inherited by executed code", !envCheck.stdout.includes("super-secret-value"));
-  delete process.env.SAMAI_TEST_SECRET;
 
   const dirBeforeClose = sandbox.dir;
   await sandbox.close();
@@ -159,9 +177,13 @@ async function testSandboxToolsBundle() {
   const listFiles = tools.find((t) => t.name === "list_files")!;
 
   await writeFile.execute({ path: "script.py", content: "print(1 + 1)" });
-  const runResult = (await executeCode.execute({ language: "python", code: "exec(open('script.py').read())" })) as string;
-  console.log(`  cross-tool run result:\n${runResult}`);
-  check("execute_code can run a file written by write_file", runResult.includes("2"));
+  if (hasBash) {
+    const runResult = (await executeCode.execute({ language: "python", code: "exec(open('script.py').read())" })) as string;
+    console.log(`  cross-tool run result:\n${runResult}`);
+    check("execute_code can run a file written by write_file", runResult.includes("2"));
+  } else {
+    skip("execute_code can run a file written by write_file", "/bin/bash not available (Windows)");
+  }
 
   const content = await readFile.execute({ path: "script.py" });
   check("read_file returns what write_file wrote", content === "print(1 + 1)");
