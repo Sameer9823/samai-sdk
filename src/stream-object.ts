@@ -151,7 +151,7 @@ export function streamObject<T>(client: Client, options: StreamObjectOptions<T>)
         throw new GenerateObjectError(1, finalParse.error, accumulatedText);
       }
 
-      queue.finish();
+       queue.finish();
       objectDeferred.resolve(finalParse.data);
       usageDeferred.resolve(usage);
     } catch (err) {
@@ -161,9 +161,15 @@ export function streamObject<T>(client: Client, options: StreamObjectOptions<T>)
     }
   })();
 
+  // Attach catch handlers so an un-awaited promise cannot crash the process
+  // via an unhandled rejection. The returned promises still reject normally
+  // when awaited — the catch above just marks them as "handled".
+  objectDeferred.promise.catch(() => {});
+  usageDeferred.promise.catch(() => {});
+
   return {
     partialObjectStream: queue.iterable,
-    object: objectDeferred.promise.catch(() => {}),
-    usage: usageDeferred.promise.catch(() => {}),
+    object: objectDeferred.promise,
+    usage: usageDeferred.promise,
   };
 }
