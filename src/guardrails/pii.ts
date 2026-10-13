@@ -38,18 +38,16 @@ function scanAndRedact(text: string, types: PiiType[]): { found: PiiType[]; reda
   return { found, redacted };
 }
 
-function rewriteMessage(message: Message, redactedText: string): Message {
+function rewriteMessage(message: Message, types: PiiType[]): Message {
   if (typeof message.content === "string") {
-    return { ...message, content: redactedText };
+    const { redacted } = scanAndRedact(message.content, types);
+    return { ...message, content: redacted };
   }
-  // Structured content: only rewrite text parts, leave tool calls/images alone
-  let consumed = 0;
+  // Structured content: redact each text part independently, leave tool calls/images/tool-results alone
   const newContent = message.content.map((part) => {
     if (part.type !== "text") return part;
-    // naive: since we redacted joined text, just re-split isn't reliable for multi-part;
-    // for the common single-text-part case this is exact.
-    consumed++;
-    return { ...part, text: redactedText };
+    const { redacted } = scanAndRedact(part.text, types);
+    return { ...part, text: redacted };
   });
   return { ...message, content: newContent };
 }
@@ -65,10 +63,10 @@ export function createPiiInputGuardrail(options: PiiGuardrailOptions = {}): Inpu
       if (msg.role !== "user") return msg;
       const text = getMessageText(msg);
       if (!text) return msg;
-      const { found, redacted } = scanAndRedact(text, types);
+      const { found } = scanAndRedact(text, types);
       if (found.length === 0) return msg;
       anyFound = [...new Set([...anyFound, ...found])];
-      return mode === "redact" ? rewriteMessage(msg, redacted) : msg;
+      return mode === "redact" ? rewriteMessage(msg, types) : msg;
     });
 
     if (anyFound.length === 0) return { allowed: true };
