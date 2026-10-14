@@ -26,11 +26,19 @@ const queriesRun: { query: string; params: Record<string, unknown> }[] = [];
 const sessionCalls: { options?: Record<string, unknown> }[] = [];
 
 class FakeSession {
+  // Configurable result rows — defaults to empty (0 rows). Tests can set
+  // `fakeSessionOverrideRows` before calling a tool to simulate DB output.
+  static overrideRows: Record<string, unknown>[] = [];
   async run(query: string, params: Record<string, unknown>) {
     queriesRun.push({ query, params });
-    return { records: [] };
+    return { records: FakeSession.overrideRows.map((r) => new FakeRecord(r)) };
   }
   async close() {}
+}
+class FakeRecord {
+  constructor(private data: Record<string, unknown>) {}
+  get(key: string) { return this.data[key]; }
+  toObject() { return { ...this.data }; }
 }
 class FakeDriver {
   int: (n: number) => unknown;
@@ -288,6 +296,9 @@ async function testRenameRelationshipCypher() {
   check("Cypher does NOT contain apoc", !queriesRun[0].query.includes("apoc"));
   check("Cypher does NOT contain [old:X] placeholder", !/\[old:X\]/.test(queriesRun[0].query));
   check("newType is interpolated after validation", queriesRun[0].query.includes("new:LIKES"));
+  check("params include newType === 'LIKES'", queriesRun[0].params.newType === "LIKES");
+  check("params include relId", queriesRun[0].params.relId === "42:0f5a7c1e-1111-4222-8333-444455556666:12");
+  check("params include userId", queriesRun[0].params.userId === "user-123");
 
   // Invalid relElementId is rejected before touching the driver.
   queriesRun.length = 0;
@@ -295,6 +306,18 @@ async function testRenameRelationshipCypher() {
   try { await renameTool.execute({ relElementId: "not-a-valid-id", newType: "LIKES" }); } catch { threw = true; }
   check("invalid relElementId rejected", threw);
   check("no query for invalid id", queriesRun.length === 0);
+
+  // When the DB returns count(new)=0 (wrong ID, already renamed, etc.),
+  // the tool must report { renamed: false }.
+  queriesRun.length = 0;
+  FakeSession.overrideRows = [{ renamed: 0 }];
+  const resultZero = await renameTool.execute({
+    relElementId: "42:0f5a7c1e-1111-4222-8333-444455556666:12",
+    newType: "LIKES",
+  });
+  check("returns { renamed: false } when DB count is 0", resultZero.renamed === false);
+  check("still passed newType to the query", queriesRun[0].params.newType === "LIKES");
+  FakeSession.overrideRows = [];
 }
 
 async function main() {
