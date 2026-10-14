@@ -134,15 +134,19 @@ async function main() {
     if (renameRelId) {
       // Use the public rename tool (from self-correction.ts)
       const renameTool = createRenameRelationshipTool(Promise.resolve(driver), "smoke-test-user");
-      await renameTool.execute({ relElementId: renameRelId, newType: "WANTS_TO_DO" });
+      const renameResult = await renameTool.execute({ relElementId: renameRelId, newType: "WANTS_TO_DO" });
+      check("rename_relationship returned { renamed: true }", renameResult.renamed === true);
 
+      // After renaming, the old relationship is DELETED and a new one is CREATED
+      // with a different elementId. Query for the new one by its type instead.
       const afterRename = await s.run(
-        "MATCH (u:User {id: $userId})-[r]->(o:Topic {name: 'cycling'}) " +
-        "WHERE elementId(r) = $relId RETURN type(r) AS t",
-        { userId: "smoke-test-user", relId: renameRelId }
+        "MATCH (u:User {id: $userId})-[r:WANTS_TO_DO]->(o:Topic {name: 'cycling', ownerId: $userId}) " +
+        "RETURN type(r) AS t, elementId(r) AS newId",
+        { userId: "smoke-test-user" }
       );
       const r = afterRename.records[0]?.toObject();
       check("rename_relationship changed the type", r?.t === "WANTS_TO_DO", String(r?.t));
+      check("new relationship has different elementId from old", r?.newId !== renameRelId);
     } else {
       check("rename_relationship changed the type", false, "no rel found to rename");
     }
@@ -171,7 +175,7 @@ async function main() {
     }
 
     try {
-      assertSafeRelation("LIKES_BAD", "relation");
+      assertSafeRelation("LIKES-bad", "relation");
       check("bad relation name rejected", false);
     } catch {
       check("bad relation name rejected", true);
@@ -204,8 +208,11 @@ async function main() {
     console.log("\n> test 6: migrateToPerUserNodes");
     // Seed a legacy node that belongs to a user but lacks ownerId
     await s.run(
+      "MATCH (o:Topic {name: 'legacy-no-owner'}) DETACH DELETE o", {}
+    );
+    await s.run(
       "MERGE (u:User {id: 'smoke-migrator'}) " +
-      "MERGE (o:Topic {name: 'legacy-no-owner', ownerId: null}) " +
+      "CREATE (o:Topic {name: 'legacy-no-owner'}) " +
       "MERGE (u)-[:LIKES]->(o)",
       {}
     );
