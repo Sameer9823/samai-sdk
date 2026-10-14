@@ -93,17 +93,18 @@ export function createRenameRelationshipTool(driverPromise: Promise<Neo4jDriver>
       const driver = await driverPromise;
       const s = driver.session();
       try {
-        await s.run(
-          `MATCH (u:User {id: $userId})-[old]->(v)
-           WHERE elementId(old) = $relId AND type(old) <> $newType
-           CREATE (u)-[new:${newType}]->(v)
-           WITH old, new
-           SET new += properties(old)
-           DELETE old
-           RETURN count(new) AS renamed`,
-          { userId, relId: relElementId }
-        );
-        return { renamed: true };
+        const result = await s.run(
+           `MATCH (u:User {id: $userId})-[old]->(v)
+            WHERE elementId(old) = $relId AND type(old) <> $newType
+            CREATE (u)-[new:${newType}]->(v)
+            WITH old, new
+            SET new += properties(old)
+            DELETE old
+            RETURN count(new) AS renamed`,
+           { userId, relId: relElementId, newType }
+         );
+         const renamed = Number(result.records[0]?.get("renamed") ?? 0);
+         return { renamed: renamed > 0 };
       } finally {
         await s.close();
       }
