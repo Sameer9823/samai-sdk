@@ -680,11 +680,14 @@ Supported languages: `"javascript"` (runs as an ES module via `node` — `import
 
 ### Browser quick start (WebRTC)
 
-`samai-sdk/voice` never sends a long-lived API key to the browser. The browser holds
-an ephemeral `ek_…` client secret (minted server-side via `createRealtimeClientSecret()`),
-and `openaiRealtime({ transport: "webrtc", clientSecret, inputStream })` uses that
-secret for SDP negotiation. If no credential is configured at all, `connect()` throws
-instead of silently falling back to a mock:
+`samai-sdk/voice` uses two transport paths, each with different key handling:
+- **WebRTC** (`transport: "webrtc"`): the browser never sees a long-lived API key.
+  It uses an ephemeral `ek_…` client secret minted server-side via
+  `createRealtimeClientSecret()`, which the browser fetches at connect time.
+- **WebSocket** (`openaiRealtime({ transport: "websocket" })` or
+  `createRealtimeSession()`): sends whatever credential you give it. If you pass
+  `apiKey`, it goes to the server as-is — so never pass a long-lived key from
+  browser code; mint an ephemeral secret server-side instead.
 
 ```ts
 const session = await openaiRealtime({ transport: "webrtc", clientSecret, inputStream })

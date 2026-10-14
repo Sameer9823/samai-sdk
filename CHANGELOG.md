@@ -45,9 +45,10 @@ unaffected):
   Existing cross-user shared nodes are **not** split on first upsert — run
   `migrateToPerUserNodes({ dryRun: true })` to audit, then call it again
   without `dryRun` to clone shared nodes per user and re-point relationships.
-- Deepgram, ElevenLabs, and `openaiRealtime()` now throw at `connect()` time
-  when no API key is configured, instead of silently falling back to `process.env`
-  at call time or returning a mock session. Use `apiKey: "mock"` in tests.
+- Deepgram, ElevenLabs, and `openaiRealtime()` still fall back to `process.env`
+  to resolve the API key, but now throw at `connect()` time when neither `apiKey`
+  nor the relevant environment variable is set, instead of silently returning a mock
+  session. Use `apiKey: "mock"` in tests.
 
 ### Added
 - `migrateToPerUserNodes({ dryRun?: boolean })` — scans for object nodes
@@ -56,13 +57,6 @@ unaffected):
 - `assertSafeRawCypher()` — exported from `samai-sdk`; guards raw Cypher with
   read-only sessions, single-pass comment/string neutralising, mutation keyword
   blocking, and mandatory `:User` anchoring.
-- `check:browser` — bundles `samai-sdk/voice` with esbuild for
-  `platform: "browser"` and fails if any Node built-in is reachable, or if the
-  emitted JavaScript references `Buffer`/`process` unguarded. Wired into
-  `npm test`.
-- `check:exports` — verifies every path in `package.json` (`main`, `module`,
-  `types`, `bin`, `exports`, `files`) exists on disk after a build. Wired into
-  `prepublishOnly` via `npm run verify`.
 - `.gitattributes` normalizing line endings to LF (`* text=auto eol=lf`).
 - `runAgent()` accepts `metadata` so `createUsageLedger` can attribute agent
   runs.
@@ -82,8 +76,9 @@ unaffected):
   neo4j-driver instance.
 - `rename_relationship` uses `elementId(old)` (Neo4j 5 element IDs) instead of
   the legacy `id()` function or `apoc` — no `apoc` dependency required.
-- `recordLike`: `ON CREATE SET p.likes = coalesce(p.likes, 0) + 1` correctly
-  initialises the engagement counter for first-time likers.
+- `recordLike` increments the engagement counter only when the LIKED relationship
+  is first created (`ON CREATE SET p.likes = coalesce(p.likes, 0) + 1`), so repeat
+  likes from the same user no longer double-count.
 - `response-shaping.ts`: fixed a regex typo in `shortRe` — `\$` (backslash-dollar)
   became `$` so the end-of-string anchor matches correctly.
 - `openaiRealtime()` WebRTC tool calls now go through `executeToolCalls` (schema
@@ -100,6 +95,8 @@ unaffected):
   (Neo4j 5 element IDs are 3-part: `5:<uuid>:12`).
 - `delete_user_fact`: validates element IDs with `ELEMENT_ID_RE` (accepts Neo4j 5
   3-part and legacy numeric IDs; rejects SQL injection and internal `_abc` IDs).
+- `rename_relationship` now passes `newType` to the query and reports whether a
+  relationship was actually renamed.
 - `assertSafeRawCypher`: single-pass tokenizer correctly distinguishes `//` inside
   string literals from comment starts; comment content at EOF is implicitly
   terminated.
@@ -129,13 +126,6 @@ unaffected):
 - `docs/.next/` added to `.gitignore`.
 - Windows: sandbox tests skip on Windows consistently; SQLite cleanup handles
   `EPERM`; symlink-unavailable test fall-backs gracefully.
-
-### Security (continued from above)
-- Per-user `ownerId` on object nodes prevents cross-user graph leakage.
-- All graph-memory Cypher is parameterized; relationship types are validated,
-  not interpolated blindly.
-- `LIMIT toInteger($limit)` prevents float-in-LIMIT errors that could cause
-  unexpected behavior in Neo4j.
 
 ## [0.3.6] - 2026-10-02
 
