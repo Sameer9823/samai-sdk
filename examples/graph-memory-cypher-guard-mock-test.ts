@@ -21,16 +21,75 @@ function check(label: string, cond: boolean, detail = "") {
   }
 }
 
+// ── Param-completeness checker for the fake driver ──
+// Extracts all $paramName tokens from a Cypher query (ignoring those inside
+// string literals and // comments) and throws if any are absent from the params.
+function checkParamCompleteness(query: string, params: Record<string, unknown>): void {
+  const missing: string[] = [];
+  let i = 0;
+  while (i < query.length) {
+    const ch = query[i];
+    // Skip single-quoted string literals
+    if (ch === "'") {
+      i++;
+      while (i < query.length && query[i] !== "'") {
+        if (query[i] === "\\" && i + 1 < query.length) { i += 2; continue; }
+        i++;
+      }
+      i++;
+      continue;
+    }
+    // Skip double-quoted string literals
+    if (ch === '"') {
+      i++;
+      while (i < query.length && query[i] !== '"') {
+        if (query[i] === "\\" && i + 1 < query.length) { i += 2; continue; }
+        i++;
+      }
+      i++;
+      continue;
+    }
+    // Skip // comments
+    if (ch === "/" && query[i + 1] === "/") {
+      i += 2;
+      while (i < query.length && query[i] !== "\n") i++;
+      continue;
+    }
+    // Detect $paramName
+    if (ch === "$") {
+      i++;
+      const start = i;
+      while (i < query.length && /[A-Za-z0-9_]/.test(query[i])) i++;
+      if (i > start) {
+        const name = query.slice(start, i);
+        if (!(name in params)) missing.push(name);
+      }
+      continue;
+    }
+    i++;
+  }
+  if (missing.length > 0) {
+    throw new MissingCypherParameterError(missing);
+  }
+}
+class MissingCypherParameterError extends Error {
+  constructor(public readonly missingParams: string[]) {
+    super("Missing Cypher parameter(s): " + missingParams.join(", "));
+    this.name = "MissingCypherParameterError";
+  }
+}
+
 // ── Fake driver that records queries, params, and session options ──
 const queriesRun: { query: string; params: Record<string, unknown> }[] = [];
 const sessionCalls: { options?: Record<string, unknown> }[] = [];
 
 class FakeSession {
   // Configurable result rows — defaults to empty (0 rows). Tests can set
-  // `fakeSessionOverrideRows` before calling a tool to simulate DB output.
+  // `FakeSession.overrideRows` before calling a tool to simulate DB output.
   static overrideRows: Record<string, unknown>[] = [];
   async run(query: string, params: Record<string, unknown>) {
     queriesRun.push({ query, params });
+    checkParamCompleteness(query, params);
     return { records: FakeSession.overrideRows.map((r) => new FakeRecord(r)) };
   }
   async close() {}
@@ -62,6 +121,54 @@ function buildMemory(driver: FakeDriver, unsafeRawCypher = false, userId = "user
     session,
     unsafeRawCypher,
   }).build();
+}
+
+// ── Step 3: Param-completeness check itself throws when a param is missing ──
+function testParamCompletenessCheck() {
+  console.log("=== TEST: fake driver throws on missing Cypher parameter ===");
+
+  // $userId missing from params → should throw
+  let threw = false;
+  let errMsg = "";
+  try {
+    checkParamCompleteness("MATCH (u:User {id: $userId}) RETURN u", {});
+  } catch (err) {
+    threw = true;
+    errMsg = (err as Error).message;
+  }
+  check("missing $userId param is rejected", threw);
+  check("error message lists the missing param", errMsg.includes("Missing Cypher parameter(s): $userId") || errMsg.includes("userId"));
+
+  // $param inside a string literal is NOT treated as a parameter
+  threw = false;
+  errMsg = "";
+  try {
+    checkParamCompleteness("MATCH (n) RETURN 'has $1 in it', $realParam", { realParam: 1 });
+  } catch (err) {
+    threw = true;
+    errMsg = (err as Error).message;
+  }
+  check("string-literal $ is ignored, real param present", !threw, errMsg);
+
+  // $param inside a // comment is NOT treated as a parameter
+  threw = false;
+  errMsg = "";
+  try {
+    checkParamCompleteness("MATCH (n) // $commentedParam RETURN $real", { real: 1 });
+  } catch (err) {
+    threw = true;
+    errMsg = (err as Error).message;
+  }
+  check("comment $ is ignored, real param present", !threw, errMsg);
+
+  // All params present → no throw
+  threw = false;
+  try {
+    checkParamCompleteness("MATCH (u:User {id: $userId})-[r:LIKES]->(o) WHERE elementId(r)=$relId RETURN o.name", { userId: "x", relId: "y" });
+  } catch {
+    threw = true;
+  }
+  check("all params present → no throw", !threw);
 }
 
 // ── Phase 1.1: Cypher injection in read_user_facts ──
@@ -329,6 +436,7 @@ async function main() {
   await testLimitToInteger();                 // 1 (limit)
   await testNoBareLimitSkip();                // 1 (grep)
   await testRenameRelationshipCypher();       // 2.4
+  testParamCompletenessCheck();                 // 3 — param-completeness guard
 
   if (failures) {
     console.log(`\n❌ ${failures} failure(s)`);
