@@ -5,59 +5,115 @@ All notable changes to samai-sdk are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
 While the project is pre-1.0, minor version bumps (0.X.0) may include
-breaking changes — these are called out explicitly below. Patch versions
-(0.3.X) will not.
+breaking changes — these are called out explicitly below. Patch versions (0.3.X)
+are bug-fix only EXCEPT 0.3.7, which contains security-driven breaking changes
+listed under "Breaking changes".
 
-## [0.4.0] - 2026-10-13
+## [Unreleased]
 
-### Changed
-- **Graph memory isolation**: `read_user_facts` and `delete_user_fact` replace
-  `execute_cypher_query` in the default tool set — both are parameterized and
-  always anchored on the `:User` node, so a memory agent can never read or mutate
-  another user's data
-- **Per-user object nodes**: `upsert_fact` now MERGEs object nodes with a
-  per-user `ownerId` property, so two users with the same fact name get
-  distinct nodes (no cross-user leakage in the graph)
-- **Curator uses fixed tools**: `runSelfCorrection()` now invokes its curator
-  agent with `merge_duplicate_nodes`, `rename_relationship`, and
-  `delete_relationship` instead of raw Cypher
-- `feedEngine.recordLike()` now uses `ON CREATE SET p.likes = 1` so the
-  engagement counter is initialised correctly for first-time likers
-- `response-shaping.ts`: escaped `\$` in template literals so `$` interpolates
-  correctly in WebRTC session config
-- Deepgram and ElevenLabs STT/TTS providers now require an explicit API key
-  at config time (or `apiKey: "mock"` for tests) instead of silently falling
-  back to `process.env` at call time; `connect()` rejects on missing credential
-  rather than returning a fake session
-- `openaiRealtime().connect()` now rejects with a clear error when no API key,
-  client secret, or `getEphemeralKey` is configured, instead of returning a
-  mock session
-
-### Breaking changes
-- `execute_cypher_query` is removed from the default graph-memory tool set;
-  use the opt-in `unsafeRawCypher` tool (read-only sessions, comment/string
-  stripping, mutation blocking, `:User` anchoring) when raw queries are truly
-  needed
-- `upsert_fact` MERGEs object nodes per-user — existing cross-user shared
-  nodes will be split into per-user copies on first upsert
-
-### Added
-- `assertSafeRawCypher()` — exported from `samai-sdk`; guards raw Cypher with
-  read-only sessions, comment/string stripping, mutation keyword blocking, and
-  mandatory `:User` anchoring
-
-### Fixed
-- `openaiRealtime({ apiKey: "mock" })`: the WebSocket data-channel handler now
-  accumulates `response.function_call_arguments.done`, executes the tool via
-  `executeToolCalls` with approval gating, and sends `function_call_output`
-  back on the data channel — restoring WebRTC tool-call support from the GA
-  preview
-- Deepgram and ElevenLabs providers: `process.env` access is now guarded by
-  `typeof process !== "undefined"` so the voice bundle stays browser-safe
-  (`check:browser` passes)
-
+### Security
+- Fixed a Cypher-injection vector in `read_user_facts`: the `relationType`
+  parameter is now validated with `assertSafeRelation` (strict `^[A-Z]+$`
+  regex) and passed as a bound `$relationType` parameter instead of being
+  string-interpolated into the query. A relation type like
+  `LIKES) DETACH DELETE n` was previously injected verbatim.
+- `assertSafeRawCypher` (the opt-in raw-Cypher guard) now uses a single-pass
+  tokenizer that correctly handles `//` inside string literals — the old
+  two-pass regex approach stripped comments first, creating a bypass where
+  `DELETE` hidden after a comment was missed.
+- **Breaking changes**: per-user object nodes with `ownerId` anchoring,
+  removal of `execute_cypher_query` from default tools, and the `toInteger($limit)`
+  fix were all applied before any published version contained them. No published
+  version of samai-sdk is affected.
 
 ## [0.3.7] - 2026-10-13
+
+### Breaking changes
+- `execute_cypher_query` is removed from the default graph-memory tool set.
+  Set `enableGraphMemory({ unsafeRawCypher: true })` to opt back in — it runs
+  READ-only sessions with single-pass comment/string stripping, mutation-keyword
+  blocking, mandatory `:User {id: $userId}` anchoring, and a `toInteger($limit)`
+  floor so plain-number params work with any neo4j-driver instance.
+- `upsert_fact` now MERGEs object nodes (Topic, Post, etc.) with a per-user
+  `ownerId` property. Existing cross-user shared nodes are **not** split on first
+  upsert — run `migrateToPerUserNodes({ dryRun: true })` first to audit, then
+  call it again without `dryRun` to clone shared nodes and re-point relationships
+  per user.
+- Deepgram and ElevenLabs STT/TTS providers now throw at `connect()` time when
+  no API key is configured, instead of silently falling back to `process.env`
+  at call time or returning a mock session. Use `apiKey: "mock"` for tests.
+- `openaiRealtime().connect()` now rejects with a clear error when no API key,
+  client secret, or `getEphemeralKey` is configured, instead of returning a
+  mock session.
+- `openaiRealtime()` WebRTC tool calls are now executed through
+  `executeToolCalls` with approval gating (fail closed without a handler),
+  restoring WebRTC tool-call support.
+
+### Added
+- `migrateToPerUserNodes({ dryRun?: boolean })` — scans for object nodes
+  without `ownerId`, reports how many need migration, and (when `dryRun` is
+  false) sets `ownerId` on single-owner nodes and clones multi-owner nodes
+  per user. Run with `{ dryRun: true }` before the real pass.
+- `assertSafeRawCypher()` — exported from `samai-sdk`; guards raw Cypher with
+  read-only sessions, single-pass comment/string neutralising, mutation keyword
+  blocking, and mandatory `:User` anchoring. Every MATCH pattern must start
+  from an anchored `(u:User {id: $userId})` node or a variable bound to one.
+- WebRTC data-channel `function_call` edge-case tests: dedup duplicate events,
+  handle malformed args JSON without throwing, reject unknown tool names, fail
+  closed on approval-gated tools without a handler, and receive args from
+  `response.output_item.done` without a prior `arguments.done`.
+
+### Changed
+- **Per-user object nodes**: `upsert_fact` and all other graph-memory tools
+  now MERGE object nodes with `ownerId: $userId`, so two users with the same
+  fact name get distinct nodes (no cross-user leakage in the graph).
+- **Fixed tool set**: graph-memory tools (`upsert_fact`, `read_user_facts`,
+  `delete_user_fact`) are fully parameterized and always anchored on the `:User`
+  node — the model passes values, never query text.
+- `read_user_facts` and the feed query now use `LIMIT toInteger($limit)` instead
+  of relying on `driver.int()`, so they work with any user-supplied
+  neo4j-driver instance.
+- `rename_relationship` uses `elementId(old)` (Neo4j 5 element IDs) instead of
+  the legacy `id()` function or `apoc` — no `apoc` dependency required.
+- `recordLike`: `ON CREATE SET p.likes = coalesce(p.likes, 0) + 1` correctly
+  initialises the engagement counter for first-time likers.
+- `response-shaping.ts`: fixed a regex typo in `shortRe` (`$/` → `$`) so the
+  end-of-string anchor works correctly.
+
+### Fixed
+- `read_user_facts`: `relationType` is validated with `assertSafeRelation`
+  (regex `^[A-Z]+$`) and bound as a parameter — prevents Cypher injection.
+- `read_user_facts`: `RETURN` clause includes `elementId(r) AS relElementId`
+  for Neo4j 5 compatibility (4-part element IDs).
+- `delete_user_fact`: validates element IDs with `ELEMENT_ID_RE` (accepts
+  Neo4j 5 `4-part` and legacy numeric IDs; rejects SQL injection and internal
+  `_abc` IDs).
+- `assertSafeRawCypher`: single-pass tokenizer correctly distinguishes `//`
+  inside string literals from comment starts; comment content at EOF is
+  implicitly terminated.
+- `assertSafeRawCypher`: every MATCH / OPTIONAL MATCH pattern must start from
+  an anchored `(u:User {id: $userId})` node or a variable bound to one —
+  rejects cross-user reads via extra MATCH, comma-separated patterns,
+  `OPTIONAL MATCH` from unanchored nodes, and `labels()` bypasses.
+- `merge_duplicate_nodes`: Cypher anchors on `(u:User {id: $userId})` and
+  includes `NOT EXISTS { MATCH (other:User)-[*1..2]-(b) WHERE other.id <> $userId }`
+  so only this user's duplicate nodes are touched.
+- Pipeline voice tool loop: the second model call receives
+  `[user, assistant[text, tool-call], tool[tool-result]]` in that order.
+- Pipeline voice approval gating: `executeToolCalls` fails closed when a tool
+  has `requiresApproval: true` and no `onApprovalRequest` handler is provided.
+- WebRTC `function_call_output` sent back on the data channel with the tool
+  result, followed by `response.create` to continue the conversation.
+- `openaiRealtime()` no longer leaks a long-lived API key to the browser:
+  WebRTC uses ephemeral client secrets via `createRealtimeClientSecret()`,
+  and `connect()` rejects when credentials are missing.
+- `userId` override: `enableGraphMemory({ userId })` correctly uses the
+  provided value instead of falling through to a default.
+- PII per-part redaction: each message part is evaluated independently, so
+  partial PII in a multi-part message is redacted without losing the
+  non-PII parts.
+- `.gitattributes`: `export-subst` configured for reproducible version
+  stamping.
 
 ## [0.3.6] - 2026-10-02
 

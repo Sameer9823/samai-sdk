@@ -72,9 +72,9 @@ export interface MigratePerUserResult {
 }
 
 /**
- * Migration for the 0.4.0 per-user-namespacing change.
+ * Migration for the 0.3.7 per-user-namespacing change.
  *
- * Object nodes (Topic, Post, etc.) created before 0.4.0 had no `ownerId`
+ * Object nodes (Topic, Post, etc.) created before 0.3.7 had no `ownerId`
  * property, so two users writing the same-name fact would share a node.
  * This runs on every User: for each object node it reaches that lacks an
  * `ownerId`, it either sets `ownerId` (if reached by only that one user)
