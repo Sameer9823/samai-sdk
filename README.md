@@ -680,7 +680,26 @@ Supported languages: `"javascript"` (runs as an ES module via `node` — `import
 
 ### Browser quick start (WebRTC)
 
-`samai-sdk/voice` is browser-safe: it imports no `node:*` modules and uses no unguarded `Buffer`, so `npm i samai-sdk` is the whole install. No patch-package, no vendored fork. The long-lived API key never leaves your server — the browser holds a short-lived `ek_…` client secret instead.
+`samai-sdk/voice` never sends a long-lived API key to the browser. The browser holds
+an ephemeral `ek_…` client secret (minted server-side via `createRealtimeClientSecret()`),
+and `openaiRealtime({ transport: "webrtc", clientSecret, inputStream })` uses that
+secret for SDP negotiation. If no credential is configured at all, `connect()` throws
+instead of silently falling back to a mock:
+
+```ts
+const session = await openaiRealtime({ transport: "webrtc", clientSecret, inputStream })
+  .connect({ agent, session: createSession("user-1", new InMemorySessionStore()) })
+  .catch((err) => { console.error("Missing credential:", err.message); });
+```
+
+In tests, pass `apiKey: "mock"` (or `clientSecret: "mock"`) to get a working mock:
+
+```ts
+const mockSession = await openaiRealtime({ apiKey: "mock" }).connect({ agent, session });
+```
+
+The same pattern applies to `elevenLabsTTS()` and `deepgramSTT()`: both throw on `connect()`
+when no API key is found, and accept `apiKey: "mock"` for testing.
 
 **1. The agent**, shared by the route and the client:
 
@@ -898,6 +917,55 @@ const result = await chatWithMemory(client, assistant, memory, "Planning a trip 
 console.log(result.output);
 
 await memory.stop();
+```
+
+**Default tool set.** The memory agent works through three fixed, parameterized tools —
+`upsert_fact`, `read_user_facts`, and `delete_user_fact`. Every query is anchored on the
+`:User {id: $userId}` node and the model passes values, never query text. These tools are
+wired in automatically; nothing to configure.
+
+```ts
+// What the memory agent sees (all parameterized, all anchored):
+// read_user_facts({ relationType: "LIKES" })
+//   → MATCH (u:User {id:$userId})-[r:LIKES]->(o)
+//     RETURN type(r), o.name, elementId(r) AS relElementId
+//     LIMIT toInteger($limit)
+//
+// relationType is validated against /^[A-Z][A-Z0-9_]{0,63}$/ before interpolation;
+// invalid values are rejected and no query is sent.
+```
+
+**Raw Cypher (opt-in).** Pass `unsafeRawCypher: true` to `enableGraphMemory()` to additionally
+get an `execute_cypher_query` tool. The session opens in `READ` access mode and a best-effort
+guard checks the query first — single-pass tokenizer (correctly handles `//` inside strings),
+write-keyword blocking, and every MATCH must start from the anchored `(u:User {id: $userId})`
+node or a variable bound to it. **This guard is NOT tenant isolation**: in multi-tenant
+deployments, enforce isolation in the database (per-user database, or per-user Neo4j roles).
+
+```ts
+import { enableGraphMemory } from "samai-sdk";
+
+const mem = enableGraphMemory({
+  client, creds, userId: "user-123", session,
+  unsafeRawCypher: true, // adds execute_cypher_query (read-only, guarded)
+}).build();
+// mem.tools contains: upsert_fact, read_user_facts, delete_user_fact,
+//                     execute_cypher_query (only when unsafeRawCypher is true)
+```
+
+**Upgrading to 0.3.7.** Object nodes now carry a per-user `ownerId`. If you have existing
+graph data from 0.3.6 or earlier (nodes without `ownerId`), migrate in two steps: first audit
+with `dryRun: true`, then run for real.
+
+```ts
+import { migrateToPerUserNodes } from "samai-sdk";
+
+const report = await migrateToPerUserNodes(await memory.driverPromise, { dryRun: true });
+console.log(report); // { objectsNeedingOwnerId: N, objectsAlreadyOwned: M, ... }
+
+// No data loss — dry run writes nothing. Once satisfied:
+const result = await migrateToPerUserNodes(await memory.driverPromise);
+console.log(result); // { objectsNeedingOwnerId: 0, clonesCreated: N, relationshipsRePointed: M }
 ```
 
 **Serving many users** — `enableGraphMemory({ creds })` creates its own driver, fine for

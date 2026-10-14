@@ -11,65 +11,72 @@ listed under "Breaking changes".
 
 ## [Unreleased]
 
-### Security
-- Fixed a Cypher-injection vector in `read_user_facts`: the `relationType`
-  parameter is now validated with `assertSafeRelation` (strict `^[A-Z]+$`
-  regex) and passed as a bound `$relationType` parameter instead of being
-  string-interpolated into the query. A relation type like
-  `LIKES) DETACH DELETE n` was previously injected verbatim.
-- `assertSafeRawCypher` (the opt-in raw-Cypher guard) now uses a single-pass
-  tokenizer that correctly handles `//` inside string literals — the old
-  two-pass regex approach stripped comments first, creating a bypass where
-  `DELETE` hidden after a comment was missed.
-- **Breaking changes**: per-user object nodes with `ownerId` anchoring,
-  removal of `execute_cypher_query` from default tools, and the `toInteger($limit)`
-  fix were all applied before any published version contained them. No published
-  version of samai-sdk is affected.
-
 ## [0.3.7] - 2026-10-13
+
+### Security
+Fixed before any published version contained them (0.3.6 and earlier are
+unaffected):
+- `read_user_facts`: the `relationType` parameter is now validated against a
+  strict identifier pattern (`/^[A-Z][A-Z0-9_]{0,63}$/`) before it is placed in
+  the query; invalid values are rejected and no query is sent. Previously the
+  value was interpolated directly, allowing Cypher injection (e.g.
+  `LIKES) DETACH DELETE n`).
+- `assertSafeRawCypher` (the opt-in raw-Cypher guard): single-pass tokenizer
+  correctly distinguishes `//` inside a string literal from a comment start;
+  query must reference `$userId`; write clauses (CREATE, SET, DELETE, etc.)
+  are blocked; every MATCH pattern must start from an anchored
+  `(u:User {id: $userId})` node or a variable bound to one.
+- Graph-memory tools always bind `$userId` **last** in the params object
+  (`{ ...(params ?? {}), userId }`), so a model-supplied `params.userId` can no
+  longer override the session owner's ID.
+- Raw Cypher sessions open in `READ` access mode
+  (`defaultAccessMode: "READ"`). The guard is best-effort — not tenant
+  isolation. Production multi-tenant deployments must enforce isolation in the
+  database (per-user database or Neo4j roles).
 
 ### Breaking changes
 - `execute_cypher_query` is removed from the default graph-memory tool set.
-  Set `enableGraphMemory({ unsafeRawCypher: true })` to opt back in — it runs
-  READ-only sessions with single-pass comment/string stripping, mutation-keyword
-  blocking, mandatory `:User {id: $userId}` anchoring, and a `toInteger($limit)`
-  floor so plain-number params work with any neo4j-driver instance.
-- `upsert_fact` now MERGEs object nodes (Topic, Post, etc.) with a per-user
-  `ownerId` property. Existing cross-user shared nodes are **not** split on first
-  upsert — run `migrateToPerUserNodes({ dryRun: true })` first to audit, then
-  call it again without `dryRun` to clone shared nodes and re-point relationships
-  per user.
-- Deepgram and ElevenLabs STT/TTS providers now throw at `connect()` time when
-  no API key is configured, instead of silently falling back to `process.env`
-  at call time or returning a mock session. Use `apiKey: "mock"` for tests.
-- `openaiRealtime().connect()` now rejects with a clear error when no API key,
-  client secret, or `getEphemeralKey` is configured, instead of returning a
-  mock session.
-- `openaiRealtime()` WebRTC tool calls are now executed through
-  `executeToolCalls` with approval gating (fail closed without a handler),
-  restoring WebRTC tool-call support.
+  Set `enableGraphMemory({ unsafeRawCypher: true })` to opt back in — its session
+  is opened with `defaultAccessMode: READ`, and queries are checked by a
+  best-effort guard (single-pass tokenizer, write-clause blocking, every MATCH
+  must start from the anchored `(u:User {id: $userId})` node or a variable bound
+  to it).
+- `upsert_fact` now MERGEs object nodes with a per-user `ownerId` property.
+  Existing cross-user shared nodes are **not** split on first upsert — run
+  `migrateToPerUserNodes({ dryRun: true })` to audit, then call it again
+  without `dryRun` to clone shared nodes per user and re-point relationships.
+- Deepgram, ElevenLabs, and `openaiRealtime()` now throw at `connect()` time
+  when no API key is configured, instead of silently falling back to `process.env`
+  at call time or returning a mock session. Use `apiKey: "mock"` in tests.
 
 ### Added
 - `migrateToPerUserNodes({ dryRun?: boolean })` — scans for object nodes
-  without `ownerId`, reports how many need migration, and (when `dryRun` is
-  false) sets `ownerId` on single-owner nodes and clones multi-owner nodes
-  per user. Run with `{ dryRun: true }` before the real pass.
+  without `ownerId`, reports how many need migration, and (when `dryRun` is false)
+  sets `ownerId` on single-owner nodes and clones multi-owner nodes per user.
 - `assertSafeRawCypher()` — exported from `samai-sdk`; guards raw Cypher with
   read-only sessions, single-pass comment/string neutralising, mutation keyword
-  blocking, and mandatory `:User` anchoring. Every MATCH pattern must start
-  from an anchored `(u:User {id: $userId})` node or a variable bound to one.
-- WebRTC data-channel `function_call` edge-case tests: dedup duplicate events,
-  handle malformed args JSON without throwing, reject unknown tool names, fail
-  closed on approval-gated tools without a handler, and receive args from
-  `response.output_item.done` without a prior `arguments.done`.
+  blocking, and mandatory `:User` anchoring.
+- `check:browser` — bundles `samai-sdk/voice` with esbuild for
+  `platform: "browser"` and fails if any Node built-in is reachable, or if the
+  emitted JavaScript references `Buffer`/`process` unguarded. Wired into
+  `npm test`.
+- `check:exports` — verifies every path in `package.json` (`main`, `module`,
+  `types`, `bin`, `exports`, `files`) exists on disk after a build. Wired into
+  `prepublishOnly` via `npm run verify`.
+- `.gitattributes` normalizing line endings to LF (`* text=auto eol=lf`).
+- `runAgent()` accepts `metadata` so `createUsageLedger` can attribute agent
+  runs.
+- `samai-sdk create` scaffolds the current version with `zod` and the selected
+  provider SDK; scaffold GitHub URLs corrected.
+- Trace viewer (`samai-sdk trace <file.json>`) binds to `127.0.0.1` and accepts
+  absolute paths via `resolve()`.
 
 ### Changed
-- **Per-user object nodes**: `upsert_fact` and all other graph-memory tools
-  now MERGE object nodes with `ownerId: $userId`, so two users with the same
-  fact name get distinct nodes (no cross-user leakage in the graph).
+- **Per-user object nodes**: `upsert_fact` and all graph-memory tools now MERGE
+  object nodes (Topic, Post, etc.) with `ownerId: $userId`, so two users with
+  the same fact name get distinct nodes.
 - **Fixed tool set**: graph-memory tools (`upsert_fact`, `read_user_facts`,
-  `delete_user_fact`) are fully parameterized and always anchored on the `:User`
-  node — the model passes values, never query text.
+  `delete_user_fact`) are parameterized and always anchored on the `:User` node.
 - `read_user_facts` and the feed query now use `LIMIT toInteger($limit)` instead
   of relying on `driver.int()`, so they work with any user-supplied
   neo4j-driver instance.
@@ -77,43 +84,58 @@ listed under "Breaking changes".
   the legacy `id()` function or `apoc` — no `apoc` dependency required.
 - `recordLike`: `ON CREATE SET p.likes = coalesce(p.likes, 0) + 1` correctly
   initialises the engagement counter for first-time likers.
-- `response-shaping.ts`: fixed a regex typo in `shortRe` (`$/` → `$`) so the
-  end-of-string anchor works correctly.
+- `response-shaping.ts`: fixed a regex typo in `shortRe` — `\$` (backslash-dollar)
+  became `$` so the end-of-string anchor matches correctly.
+- `openaiRealtime()` WebRTC tool calls now go through `executeToolCalls` (schema
+  validation, approval gating, guardrails, timeout) and send `function_call_output`
+  back on the data channel.
+- Output guardrails and the budget guardrail configured on `createClient` now
+  apply inside `runAgent()` after streaming completes.
 
 ### Fixed
-- `read_user_facts`: `relationType` is validated with `assertSafeRelation`
-  (regex `^[A-Z]+$`) and bound as a parameter — prevents Cypher injection.
+- `read_user_facts`: `relationType` validated against `/^[A-Z][A-Z0-9_]{0,63}$/`
+  via `assertSafeRelation()` before interpolation into `-[r:${relationType}]->`;
+  invalid values are rejected, no query is sent.
 - `read_user_facts`: `RETURN` clause includes `elementId(r) AS relElementId`
-  for Neo4j 5 compatibility (4-part element IDs).
-- `delete_user_fact`: validates element IDs with `ELEMENT_ID_RE` (accepts
-  Neo4j 5 `4-part` and legacy numeric IDs; rejects SQL injection and internal
-  `_abc` IDs).
-- `assertSafeRawCypher`: single-pass tokenizer correctly distinguishes `//`
-  inside string literals from comment starts; comment content at EOF is
-  implicitly terminated.
-- `assertSafeRawCypher`: every MATCH / OPTIONAL MATCH pattern must start from
-  an anchored `(u:User {id: $userId})` node or a variable bound to one —
-  rejects cross-user reads via extra MATCH, comma-separated patterns,
-  `OPTIONAL MATCH` from unanchored nodes, and `labels()` bypasses.
-- `merge_duplicate_nodes`: Cypher anchors on `(u:User {id: $userId})` and
-  includes `NOT EXISTS { MATCH (other:User)-[*1..2]-(b) WHERE other.id <> $userId }`
-  so only this user's duplicate nodes are touched.
-- Pipeline voice tool loop: the second model call receives
-  `[user, assistant[text, tool-call], tool[tool-result]]` in that order.
-- Pipeline voice approval gating: `executeToolCalls` fails closed when a tool
-  has `requiresApproval: true` and no `onApprovalRequest` handler is provided.
-- WebRTC `function_call_output` sent back on the data channel with the tool
-  result, followed by `response.create` to continue the conversation.
-- `openaiRealtime()` no longer leaks a long-lived API key to the browser:
-  WebRTC uses ephemeral client secrets via `createRealtimeClientSecret()`,
-  and `connect()` rejects when credentials are missing.
-- `userId` override: `enableGraphMemory({ userId })` correctly uses the
-  provided value instead of falling through to a default.
-- PII per-part redaction: each message part is evaluated independently, so
-  partial PII in a multi-part message is redacted without losing the
-  non-PII parts.
-- `.gitattributes`: `export-subst` configured for reproducible version
-  stamping.
+  (Neo4j 5 element IDs are 3-part: `5:<uuid>:12`).
+- `delete_user_fact`: validates element IDs with `ELEMENT_ID_RE` (accepts Neo4j 5
+  3-part and legacy numeric IDs; rejects SQL injection and internal `_abc` IDs).
+- `assertSafeRawCypher`: single-pass tokenizer correctly distinguishes `//` inside
+  string literals from comment starts; comment content at EOF is implicitly
+  terminated.
+- `assertSafeRawCypher`: every MATCH / OPTIONAL MATCH pattern must start from an
+  anchored `(u:User {id: $userId})` node or a variable bound to one — rejects
+  cross-user reads via extra MATCH, comma-separated patterns, `OPTIONAL MATCH`
+  from unanchored nodes, `labels()` bypasses, and `WITH` + unanchored MATCH.
+- `merge_duplicate_nodes`: Cypher anchors on `(u:User {id: $userId})` and includes
+  `NOT EXISTS { MATCH (other:User)-[*1..2]-(b) WHERE other.id <> $userId }` so
+  only this user's duplicate nodes are touched.
+- Handoff: other tool calls in the same turn as a handoff now receive error-flagged
+  tool results (previously orphaned `tool_use` caused provider 400s).
+- Streaming token usage: OpenAI-compatible providers request `include_usage: true`;
+  Anthropic streaming now reports input tokens.
+- Anthropic and Bedrock: empty text blocks are no longer sent on tool-call turns.
+- `streamObject()`: an un-awaited `usage`/`object` promise no longer crashes the
+  process on failure; awaiting callers still see the rejection.
+- Sandbox: timeout now kills the whole process group, with ESRCH handled.
+- `handleFunctionCall` in the realtime WebSocket path wraps `JSON.parse` in
+  try/catch, so malformed argument JSON no longer crashes the session.
+- PII guardrail: each text part in a multi-part message is redacted
+  independently, so partial PII is caught without losing non-PII parts.
+- `openaiRealtime().connect()` now rejects on failure instead of resolving a
+  "failed" session state.
+- CI no longer ignores test failures; `npm test` exits non-zero on any failure.
+- `better-sqlite3`, `ioredis`, and `neo4j-driver` added to devDependencies.
+- `docs/.next/` added to `.gitignore`.
+- Windows: sandbox tests skip on Windows consistently; SQLite cleanup handles
+  `EPERM`; symlink-unavailable test fall-backs gracefully.
+
+### Security (continued from above)
+- Per-user `ownerId` on object nodes prevents cross-user graph leakage.
+- All graph-memory Cypher is parameterized; relationship types are validated,
+  not interpolated blindly.
+- `LIMIT toInteger($limit)` prevents float-in-LIMIT errors that could cause
+  unexpected behavior in Neo4j.
 
 ## [0.3.6] - 2026-10-02
 
@@ -160,12 +182,6 @@ patching.
   the test doubles are all exported from `samai-sdk/voice`, so a client bundle
   never has to reach for the root entry (which pulls in Node-only modules).
 - `stopMediaStream()` — releases the microphone when a call ends.
-- `check:browser` — bundles `samai-sdk/voice` with esbuild for `platform:
-  "browser"` and fails if any Node built-in is reachable, or if the emitted
-  JavaScript references `Buffer`/`process` unguarded. Wired into `npm test`.
-- `check:exports` — verifies every path in `package.json` (`main`, `module`,
-  `types`, `bin`, `exports`, `files`) exists on disk after a build. Wired into
-  `prepublishOnly` via `npm run verify`.
 
 ### Changed
 - **Realtime session config now uses the GA shape**: `session.type: "realtime"`,
