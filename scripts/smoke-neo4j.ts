@@ -9,7 +9,7 @@
  *   # Wait ~15s for it to be ready, then:
  *   NEO4J_URI=bolt://localhost:7687 NEO4J_USER=neo4j NEO4J_PASSWORD=testpass npm run smoke:neo4j
  *
- * Exits 0 on all-pass, 1 on any failure.
+ * Exits 0 on all-pass, 1 on any failure, 2 when env vars are missing (NOT RUN).
  */
 import {
   loadNeo4jDriver,
@@ -35,9 +35,9 @@ const NEO4J_USER = process.env.NEO4J_USER;
 const NEO4J_PASSWORD = process.env.NEO4J_PASSWORD;
 
 if (!NEO4J_URI || !NEO4J_USER || !NEO4J_PASSWORD) {
-  console.error("Smoke test skipped \u2014 set NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD env vars.");
+  console.error("NOT RUN — set NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD environment variables.");
   console.error("Start Neo4j 5: docker run -d --name neo4j-smoke -p 7687:7687 -e NEO4J_AUTH=neo4j/testpass neo4j:5");
-  process.exit(0);
+  process.exit(2);
 }
 
 async function main() {
@@ -143,6 +143,8 @@ async function main() {
       );
       const r = afterRename.records[0]?.toObject();
       check("rename_relationship changed the type", r?.t === "WANTS_TO_DO", String(r?.t));
+    } else {
+      check("rename_relationship changed the type", false, "no rel found to rename");
     }
 
     // Test 5: assertSafeRawCypher
@@ -203,7 +205,7 @@ async function main() {
     // Seed a legacy node that belongs to a user but lacks ownerId
     await s.run(
       "MERGE (u:User {id: 'smoke-migrator'}) " +
-      "MERGE (o:Topic {name: 'legacy-no-owner'}) " +
+      "MERGE (o:Topic {name: 'legacy-no-owner', ownerId: null}) " +
       "MERGE (u)-[:LIKES]->(o)",
       {}
     );
@@ -213,13 +215,6 @@ async function main() {
       {}
     );
     check("seeded a legacy node without ownerId", Number(preCount.records[0]?.get("cnt")) === 1);
-
-    // Need a driver that points to the same DB but with a different userId
-    const migratorMemory = enableGraphMemory({
-      driver,
-      userId: "smoke-migrator",
-      unsafeRawCypher: false,
-    }).build();
 
     const preMigration = await migrateToPerUserNodes(driver);
     check("migration completed (objectsNeedingOwnerId = 0 or clones created)",
@@ -236,10 +231,21 @@ async function main() {
     await s.close();
   } finally {
     console.log("\n> cleanup");
-    for (const uid of ["smoke-test-user", "smoke-test-user-2", "smoke-migrator"]) {
-      await deleteUserGraph(driver, uid, { deep: true }).catch(() => {});
+    // Clean up any seeded data that might remain (idempotent)
+    const cleanupSession = driver.session();
+    try {
+      for (const uid of ["smoke-test-user", "smoke-test-user-2", "smoke-migrator"]) {
+        await deleteUserGraph(driver, uid, { deep: true }).catch(() => {});
+      }
+      // Also explicitly delete the legacy node in case deleteUserGraph missed it
+      await cleanupSession.run(
+        "MATCH (o:Topic {name: 'legacy-no-owner'}) DETACH DELETE o",
+        {}
+      );
+    } finally {
+      await cleanupSession.close();
+      await driver.close();
     }
-    await driver.close();
   }
 
   if (failures) {
