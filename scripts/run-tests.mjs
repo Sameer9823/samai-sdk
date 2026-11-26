@@ -40,6 +40,7 @@ const files = [
   "mcp-usage-test",
   "sandbox-usage-test",
   "sandbox-timeout-group-mock-test",
+  "code-execution-timeout-mock-test",
   "voice-usage-test",
   "graph-memory-mock-test",
   "graph-memory-cypher-guard-mock-test",

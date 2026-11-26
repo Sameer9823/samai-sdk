@@ -64,7 +64,10 @@ export function createCodeExecutionTool(
       language: z.enum(languages as [SandboxLanguage, ...SandboxLanguage[]]).describe("Which interpreter to run the code with"),
       code: z.string().min(1).describe("The full source code to execute"),
     }),
-    timeoutMs: options.timeoutMs ?? 30_000,
+    // Tool-level timeout is the sandbox timeout + 5s, so the sandbox's own
+    // timeout fires first and its result (stdout + timedOut) is returned instead
+    // of the tool loop killing the call with a generic timeout error.
+    timeoutMs: (options.timeoutMs ?? 30_000) + 5_000,
     requiresApproval: options.requiresApproval ?? false,
     execute: async ({ language, code }) => {
       if (!sandbox) sandbox = createSandbox(options.sandboxOptions);
