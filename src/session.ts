@@ -87,10 +87,37 @@ export interface Session {
   clear(): Promise<void>;
 }
 
-export function createSession(id: string, store: SessionStore = new InMemorySessionStore()): Session {
+export interface CreateSessionOptions {
+  /**
+   * Cap on how many messages `getMessages()` returns. When exceeded, the history is
+   * trimmed from the front at a user-message boundary, so an assistant tool-call and
+   * its tool-result messages are never split apart (providers reject an orphaned
+   * tool result). The kept slice may slightly exceed `maxMessages` to land on that
+   * boundary. Default: no cap.
+   */
+  maxMessages?: number;
+}
+
+export function createSession(
+  id: string,
+  store: SessionStore = new InMemorySessionStore(),
+  options: CreateSessionOptions = {}
+): Session {
+  const maxMessages = options.maxMessages;
+
+  function trim(messages: Message[]): Message[] {
+    if (!maxMessages || messages.length <= maxMessages) return messages;
+    // Start at the candidate cut, then advance to the next user message so we
+    // never begin mid tool-call/tool-result pair.
+    let start = messages.length - maxMessages;
+    while (start < messages.length && messages[start].role !== "user") start++;
+    if (start >= messages.length) return messages; // no user boundary — keep all
+    return messages.slice(start);
+  }
+
   return {
     id,
-    getMessages: async () => store.getMessages(id),
+    getMessages: async () => trim(await store.getMessages(id)),
     appendMessages: async (messages) => store.appendMessages(id, messages),
     clear: async () => store.clear(id),
   };
