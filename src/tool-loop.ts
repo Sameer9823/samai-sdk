@@ -42,9 +42,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number, toolName: string): Prom
 
 /**
  * Executes local tool functions for a batch of tool calls the model made.
- * Runs tools concurrently and never throws — failures (validation errors,
- * timeouts, rejected guardrails, denied approvals) are captured as isError
- * tool results so the model can see and react to them.
+ * Runs tools one after another (sequentially) and never throws — failures
+ * (validation errors, timeouts, rejected guardrails, denied approvals) are
+ * captured as isError tool results so the model can see and react to them.
  *
  * Order per call: tool-guardrail check -> approval gate (if required) ->
  * schema validation -> timed execution.
@@ -57,8 +57,7 @@ export async function executeToolCalls(
   const byName = new Map(tools.map((t) => [t.name, t]));
   const defaultTimeoutMs = options.defaultTimeoutMs ?? 30_000;
 
-  return Promise.all(
-    toolCalls.map(async (call): Promise<ToolResultPart> => {
+  async function runOne(call: ToolCallPart): Promise<ToolResultPart> {
       const tool = byName.get(call.toolName);
       if (!tool) {
         return {
@@ -73,7 +72,7 @@ export async function executeToolCalls(
       try {
         // --- tool guardrails: reject dangerous calls before they run ---
         // Inside the try so a throwing guardrail becomes an isError tool result
-        // rather than rejecting the whole Promise.all batch.
+        // rather than rejecting the whole batch.
         for (const guardrail of options.toolGuardrails ?? []) {
           const outcome = await guardrail({
             agentName: options.agentName ?? "",
@@ -140,6 +139,11 @@ export async function executeToolCalls(
           isError: true,
         };
       }
-    })
-  );
+  }
+
+  const results: ToolResultPart[] = [];
+  for (const call of toolCalls) {
+    results.push(await runOne(call));
+  }
+  return results;
 }

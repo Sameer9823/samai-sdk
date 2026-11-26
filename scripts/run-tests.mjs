@@ -32,6 +32,7 @@ const files = [
   "run-output-guardrail-streaming-mock-test",
   "session-max-messages-mock-test",
   "tool-loop-guardrail-throw-mock-test",
+  "tool-loop-sequential-mock-test",
   "mcp-connect-retry-mock-test",
   "concurrency-semaphore-mock-test",
   "vue-usage-mock-test",
