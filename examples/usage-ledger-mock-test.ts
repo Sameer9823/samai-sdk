@@ -135,7 +135,7 @@ console.log(`  unknown model recorded cost: $${unpricedStats.totalCostUsd} (expe
 if (unpricedStats.totalCostUsd !== 0) throw new Error("unpriced model cost should be $0 but flagged");
 
 const budget = createBudgetGuardrail({ maxCostUsd: 1.0 });
-const blocked = budget.outputGuardrail({
+const blocked = await budget.outputGuardrail({
   result: { model: "no-such-model", text: "", toolCalls: [], finishReason: "stop", usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, messages: [], raw: null },
 });
 console.log(`  budget blocks unpriced model: ${blocked.allowed === false}`);
