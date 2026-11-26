@@ -70,25 +70,27 @@ export async function executeToolCalls(
         };
       }
 
-      // --- tool guardrails: reject dangerous calls before they run ---
-      for (const guardrail of options.toolGuardrails ?? []) {
-        const outcome = await guardrail({
-          agentName: options.agentName ?? "",
-          toolName: call.toolName,
-          args: call.args,
-        });
-        if (!outcome.allowed) {
-          return {
-            type: "tool-result",
-            toolCallId: call.toolCallId,
-            toolName: call.toolName,
-            result: `Error: blocked by tool guardrail (${outcome.reason ?? "unspecified"})`,
-            isError: true,
-          };
-        }
-      }
-
       try {
+        // --- tool guardrails: reject dangerous calls before they run ---
+        // Inside the try so a throwing guardrail becomes an isError tool result
+        // rather than rejecting the whole Promise.all batch.
+        for (const guardrail of options.toolGuardrails ?? []) {
+          const outcome = await guardrail({
+            agentName: options.agentName ?? "",
+            toolName: call.toolName,
+            args: call.args,
+          });
+          if (!outcome.allowed) {
+            return {
+              type: "tool-result",
+              toolCallId: call.toolCallId,
+              toolName: call.toolName,
+              result: `Error: blocked by tool guardrail (${outcome.reason ?? "unspecified"})`,
+              isError: true,
+            };
+          }
+        }
+
         const parsedArgs = tool.parameters.parse(call.args);
 
         // --- approval gate ---
