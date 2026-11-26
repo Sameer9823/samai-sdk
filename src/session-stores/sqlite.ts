@@ -63,7 +63,10 @@ export class SqliteSessionStore implements SessionStore {
   async appendMessages(sessionId: string, messages: Message[]): Promise<void> {
     if (messages.length === 0) return;
     const db = await this.dbPromise;
-    const existing = await this.getMessages(sessionId);
+    // better-sqlite3 is synchronous: read and write with no `await` between them
+    // so overlapping appends can't interleave and lose each other's messages.
+    const row = db.prepare(`SELECT messages FROM ${this.tableName} WHERE session_id = ?`).get(sessionId);
+    const existing = row ? (JSON.parse(row.messages) as Message[]) : [];
     const updated = [...existing, ...messages];
     db.prepare(
       `INSERT INTO ${this.tableName} (session_id, messages) VALUES (?, ?)

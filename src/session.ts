@@ -30,6 +30,8 @@ export class InMemorySessionStore implements SessionStore {
 
 /** Persists each session as a JSON file on disk — survives process restarts with zero extra infra. */
 export class FileSessionStore implements SessionStore {
+  private writeChains = new Map<string, Promise<void>>();
+
   constructor(private dir: string) {}
 
   private async pathFor(sessionId: string): Promise<string> {
@@ -50,9 +52,17 @@ export class FileSessionStore implements SessionStore {
     }
   }
   async appendMessages(sessionId: string, messages: Message[]): Promise<void> {
-    const { writeFile } = await import("node:fs/promises");
-    const existing = await this.getMessages(sessionId);
-    await writeFile(await this.pathFor(sessionId), JSON.stringify([...existing, ...messages], null, 2), "utf-8");
+    // Serialize read-modify-write per session so overlapping appends don't lose
+    // each other's messages. The stored tail swallows errors so one failed write
+    // doesn't poison the chain; the returned promise still rejects for the caller.
+    const prev = this.writeChains.get(sessionId) ?? Promise.resolve();
+    const next = prev.then(async () => {
+      const { writeFile } = await import("node:fs/promises");
+      const existing = await this.getMessages(sessionId);
+      await writeFile(await this.pathFor(sessionId), JSON.stringify([...existing, ...messages], null, 2), "utf-8");
+    });
+    this.writeChains.set(sessionId, next.catch(() => {}));
+    return next;
   }
   async clear(sessionId: string): Promise<void> {
     const { rm } = await import("node:fs/promises");

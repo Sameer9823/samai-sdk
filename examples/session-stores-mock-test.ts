@@ -1,5 +1,7 @@
-import { rmSync } from "node:fs";
-import { RedisSessionStore, SqliteSessionStore, createSession } from "../src/index.js";
+import { rmSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { RedisSessionStore, SqliteSessionStore, FileSessionStore, createSession } from "../src/index.js";
 
 // ===========================================================================
 // TEST 1 — SqliteSessionStore against the REAL better-sqlite3 library
@@ -57,22 +59,25 @@ console.log("✅ TEST 1 passed (real better-sqlite3, real file on disk)\n");
 console.log("=== TEST 2: RedisSessionStore key prefixing, TTL, and isolation ===");
 
 class FakeRedisClient {
-  store = new Map<string, { value: string; expiresAt?: number }>();
-  setCalls: { key: string; args: unknown[] }[] = [];
+  lists = new Map<string, string[]>();
+  expireCalls: { key: string; seconds: number }[] = [];
 
-  async get(key: string): Promise<string | null> {
-    const entry = this.store.get(key);
-    return entry ? entry.value : null;
+  async rpush(key: string, ...values: string[]): Promise<unknown> {
+    const arr = this.lists.get(key) ?? [];
+    arr.push(...values);
+    this.lists.set(key, arr);
+    return arr.length;
   }
-  async set(key: string, value: string, ...args: unknown[]): Promise<unknown> {
-    this.setCalls.push({ key, args });
-    const ttlIdx = args.findIndex((a) => a === "EX");
-    const expiresAt = ttlIdx >= 0 ? Date.now() + Number(args[ttlIdx + 1]) * 1000 : undefined;
-    this.store.set(key, { value, expiresAt });
-    return "OK";
+  async lrange(key: string, start: number, stop: number): Promise<string[]> {
+    const arr = this.lists.get(key) ?? [];
+    return stop === -1 ? arr.slice(start) : arr.slice(start, stop + 1);
+  }
+  async expire(key: string, seconds: number): Promise<unknown> {
+    this.expireCalls.push({ key, seconds });
+    return 1;
   }
   async del(key: string): Promise<unknown> {
-    return this.store.delete(key) ? 1 : 0;
+    return this.lists.delete(key) ? 1 : 0;
   }
 }
 
@@ -83,22 +88,57 @@ const redisSession = createSession("room-1", redisStore);
 await redisSession.appendMessages([{ role: "user", content: "hi" }]);
 await redisSession.appendMessages([{ role: "assistant", content: "hello!" }]);
 
-const storedKey = [...fakeClient.store.keys()][0];
+const storedKey = [...fakeClient.lists.keys()][0];
 console.log(`  key used: "${storedKey}" (expected prefix "samai:test:")`);
 if (storedKey !== "samai:test:room-1") throw new Error("keyPrefix was not applied correctly");
 
-const lastSetArgs = fakeClient.setCalls.at(-1)!.args;
-console.log(`  TTL applied on write: ${lastSetArgs.includes("EX")} (expected true)`);
-if (!lastSetArgs.includes("EX")) throw new Error("ttlSeconds option did not translate to a Redis EX argument");
+const lastExpire = fakeClient.expireCalls.at(-1)!;
+console.log(`  TTL applied via EXPIRE on write: ${lastExpire.seconds === 3600} (expected true)`);
+if (lastExpire.seconds !== 3600) throw new Error("ttlSeconds option did not translate to a Redis EXPIRE call");
 
 const msgs = await redisSession.getMessages();
 console.log(`  round-tripped message count: ${msgs.length} (expected 2)`);
 if (msgs.length !== 2) throw new Error("Expected 2 messages to round-trip through the fake Redis store");
+
+// Overlapping appends must not lose each other's messages (RPUSH per message).
+await Promise.all([
+  redisSession.appendMessages([{ role: "user", content: "concurrent-a" }]),
+  redisSession.appendMessages([{ role: "user", content: "concurrent-b" }]),
+]);
+const afterConcurrent = await redisSession.getMessages();
+console.log(`  after 2 concurrent appends: ${afterConcurrent.length} (expected 4)`);
+if (afterConcurrent.length !== 4) throw new Error("Overlapping Redis appends lost messages");
+if (!afterConcurrent.some((m) => m.content === "concurrent-a") || !afterConcurrent.some((m) => m.content === "concurrent-b")) {
+  throw new Error("Overlapping Redis appends dropped a concurrent message");
+}
 
 await redisSession.clear();
 const afterRedisClear = await redisStore.getMessages("room-1");
 if (afterRedisClear.length !== 0) throw new Error("clear() did not remove the Redis key");
 
 console.log("✅ TEST 2 passed\n");
+
+// ===========================================================================
+// TEST 3 — FileSessionStore serializes overlapping appends per session
+// (in-process promise chain), so concurrent writes don't clobber each other.
+// ===========================================================================
+console.log("=== TEST 3: FileSessionStore overlapping appends don't lose messages ===");
+
+const tempDir = mkdtempSync(join(tmpdir(), "samai-file-store-"));
+try {
+  const fileStore = new FileSessionStore(tempDir);
+  const fileSession = createSession("s-overlap", fileStore);
+  await Promise.all([
+    fileSession.appendMessages([{ role: "user", content: "a" }]),
+    fileSession.appendMessages([{ role: "user", content: "b" }]),
+    fileSession.appendMessages([{ role: "user", content: "c" }]),
+  ]);
+  const fileMsgs = await fileSession.getMessages();
+  console.log(`  file store message count after 3 concurrent appends: ${fileMsgs.length} (expected 3)`);
+  if (fileMsgs.length !== 3) throw new Error("FileSessionStore lost messages under concurrent appends");
+} finally {
+  rmSync(tempDir, { recursive: true, force: true });
+}
+console.log("✅ TEST 3 passed\n");
 
 console.log("🎉 All session-store tests passed");

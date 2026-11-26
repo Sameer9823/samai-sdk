@@ -13,8 +13,9 @@ export interface RedisSessionStoreOptions {
 }
 
 interface MinimalRedisClient {
-  get(key: string): Promise<string | null>;
-  set(key: string, value: string, ...args: unknown[]): Promise<unknown>;
+  rpush(key: string, ...values: string[]): Promise<unknown>;
+  lrange(key: string, start: number, stop: number): Promise<string[]>;
+  expire(key: string, seconds: number): Promise<unknown>;
   del(key: string): Promise<unknown>;
 }
 
@@ -61,21 +62,18 @@ export class RedisSessionStore implements SessionStore {
 
   async getMessages(sessionId: string): Promise<Message[]> {
     const client = await this.clientPromise;
-    const raw = await client.get(this.key(sessionId));
-    return raw ? (JSON.parse(raw) as Message[]) : [];
+    const raw = await client.lrange(this.key(sessionId), 0, -1);
+    return raw.map((entry) => JSON.parse(entry) as Message);
   }
 
   async appendMessages(sessionId: string, messages: Message[]): Promise<void> {
     if (messages.length === 0) return;
     const client = await this.clientPromise;
-    const existing = await this.getMessages(sessionId);
-    const updated = [...existing, ...messages];
     const key = this.key(sessionId);
-    if (this.ttlSeconds) {
-      await client.set(key, JSON.stringify(updated), "EX", this.ttlSeconds);
-    } else {
-      await client.set(key, JSON.stringify(updated));
-    }
+    // RPUSH each message as its own list element — atomic per message, so
+    // overlapping appends never lose each other's writes (no read-modify-write).
+    await client.rpush(key, ...messages.map((m) => JSON.stringify(m)));
+    if (this.ttlSeconds) await client.expire(key, this.ttlSeconds);
   }
 
   async clear(sessionId: string): Promise<void> {
