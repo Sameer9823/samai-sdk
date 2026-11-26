@@ -115,7 +115,8 @@
     "example:run-output-guardrail-streaming-mock-test": "tsx examples/run-output-guardrail-streaming-mock-test.ts",
     "example:session-max-messages-mock-test": "tsx examples/session-max-messages-mock-test.ts",
     "example:tool-loop-guardrail-throw-mock-test": "tsx examples/tool-loop-guardrail-throw-mock-test.ts",
-    "example:mcp-connect-retry-mock-test": "tsx examples/mcp-connect-retry-mock-test.ts"
+    "example:mcp-connect-retry-mock-test": "tsx examples/mcp-connect-retry-mock-test.ts",
+    "example:concurrency-semaphore-mock-test": "tsx examples/concurrency-semaphore-mock-test.ts"
   },
   "keywords": [
     "ai",

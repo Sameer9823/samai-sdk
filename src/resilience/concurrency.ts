@@ -6,7 +6,7 @@ export interface ConcurrencyLimitOptions {
 }
 
 /** A simple counting semaphore — no dependencies, just enough for `withConcurrencyLimit()`. */
-class Semaphore {
+export class Semaphore {
   private available: number;
   private queue: (() => void)[] = [];
 
@@ -19,14 +19,15 @@ class Semaphore {
       this.available--;
       return;
     }
+    // Waiters are handed the slot directly by release() — don't decrement here,
+    // or a new acquire() landing in the same tick as release() would double-count.
     await new Promise<void>((resolve) => this.queue.push(resolve));
-    this.available--;
   }
 
   release(): void {
-    this.available++;
     const next = this.queue.shift();
-    if (next) next();
+    if (next) next(); // hand the slot straight to the next waiter
+    else this.available++; // no waiter — free the slot
   }
 
   /** Calls currently waiting for a slot to free up — useful for tests/observability. */

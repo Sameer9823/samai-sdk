@@ -33,6 +33,7 @@ const files = [
   "session-max-messages-mock-test",
   "tool-loop-guardrail-throw-mock-test",
   "mcp-connect-retry-mock-test",
+  "concurrency-semaphore-mock-test",
   "vue-usage-mock-test",
   "svelte-usage-mock-test",
   "valibot-mock-test",
