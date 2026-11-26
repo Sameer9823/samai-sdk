@@ -215,7 +215,13 @@ export function createMCPClient(options: MCPClientOptions): MCPClient {
   }
 
   function getClient(): Promise<RawMCPClient> {
-    if (!clientPromise) clientPromise = connectInternal();
+    if (!clientPromise) {
+      clientPromise = connectInternal().catch((err) => {
+        // Don't cache a failed connection — clear it so a later call can retry.
+        clientPromise = null;
+        throw err;
+      });
+    }
     return clientPromise;
   }
 
@@ -260,7 +266,12 @@ export function createMCPClient(options: MCPClientOptions): MCPClient {
 
     async close() {
       if (!clientPromise) return;
-      const client = await clientPromise;
+      let client: RawMCPClient;
+      try {
+        client = await clientPromise;
+      } catch {
+        return; // connect failed — there's nothing to close, and close() must not throw
+      }
       await client.close();
     },
   };
