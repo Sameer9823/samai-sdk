@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Live Neo4j 5 smoke test for samai-sdk graph-memory (0.3.7).
+ * Live Neo4j 5 smoke test for samai-sdk graph-memory (0.3.8).
  *
  * NOT part of `npm test` (needs a running database). Run manually:
  *
@@ -41,7 +41,7 @@ if (!NEO4J_URI || !NEO4J_USER || !NEO4J_PASSWORD) {
 }
 
 async function main() {
-  console.log("=== Neo4j 5 smoke test for samai-sdk 0.3.7 ===\n");
+  console.log("=== Neo4j 5 smoke test for samai-sdk 0.3.8 ===\n");
 
   const driver = await loadNeo4jDriver({
     uri: NEO4J_URI,

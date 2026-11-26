@@ -6,10 +6,19 @@ All notable changes to samai-sdk are documented here. This project follows
 
 While the project is pre-1.0, minor version bumps (0.X.0) may include
 breaking changes — these are called out explicitly below. Patch versions (0.3.X)
-are bug-fix only EXCEPT 0.3.7, which contains security-driven breaking changes
+are bug-fix only EXCEPT 0.3.7, which contains security-driven breaking changes,
+and 0.3.8, which contains GTM tracking and version bump only
 listed under "Breaking changes".
 
 ## [Unreleased]
+
+## [0.3.8] - 2026-11-26
+
+### Added
+- Google Tag Manager (GTM-TWMNP3PZ) tracking added to documentation site
+
+### Changed
+- Version bump to 0.3.8
 
 ## [0.3.7] - 2026-10-13
 

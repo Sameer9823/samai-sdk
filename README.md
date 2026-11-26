@@ -956,7 +956,7 @@ const mem = enableGraphMemory({
 //                     execute_cypher_query (only when unsafeRawCypher is true)
 ```
 
-**Upgrading to 0.3.7.** Object nodes now carry a per-user `ownerId`. If you have existing
+**Upgrading to 0.3.8.** Object nodes now carry a per-user `ownerId`. If you have existing
 graph data from 0.3.6 or earlier (nodes without `ownerId`), migrate in two steps: first audit
 with `dryRun: true`, then run for real.
 
