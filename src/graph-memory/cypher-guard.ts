@@ -82,7 +82,12 @@ function toCodeOnly(query: string): string {
         break;
 
       case "single":
-        if (ch === "'") {
+        if (ch === "\\") {
+          // Backslash escapes the next character — skip both so an escaped
+          // quote doesn't end the string and hide following code.
+          result += "  ";
+          i += 2;
+        } else if (ch === "'") {
           state = "code";
           result += " ";
           i += 1;
@@ -93,7 +98,10 @@ function toCodeOnly(query: string): string {
         break;
 
       case "double":
-        if (ch === '"' && query[i - 1] !== "\\") {
+        if (ch === "\\") {
+          result += "  ";
+          i += 2;
+        } else if (ch === '"') {
           state = "code";
           result += " ";
           i += 1;

@@ -223,6 +223,7 @@ async function testRawCypherGuard() {
     ["comma-separated unanchored pattern", "MATCH (u:User {id:$userId}), (o) RETURN o"],
     ["OPTIONAL MATCH unanchored", "OPTIONAL MATCH (o) RETURN o"],
     ["WITH u then MATCH (o)", "MATCH (u:User {id:$userId}) WITH u MATCH (o) RETURN o"],
+    ["escaped quote hides second MATCH", "MATCH (u:User {id: $userId}) WHERE u.name = \"x\\\\\" MATCH (o) RETURN o //\" RETURN u"],
   ];
 
   for (const [label, query] of mustReject) {
