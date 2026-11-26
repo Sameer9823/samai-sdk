@@ -57,9 +57,13 @@ export class FileSessionStore implements SessionStore {
     // doesn't poison the chain; the returned promise still rejects for the caller.
     const prev = this.writeChains.get(sessionId) ?? Promise.resolve();
     const next = prev.then(async () => {
-      const { writeFile } = await import("node:fs/promises");
+      const { writeFile, rename } = await import("node:fs/promises");
       const existing = await this.getMessages(sessionId);
-      await writeFile(await this.pathFor(sessionId), JSON.stringify([...existing, ...messages], null, 2), "utf-8");
+      const path = await this.pathFor(sessionId);
+      // Atomic write: temp file + rename so a crash mid-write can't corrupt the log.
+      const tmp = `${path}.tmp`;
+      await writeFile(tmp, JSON.stringify([...existing, ...messages], null, 2), "utf-8");
+      await rename(tmp, path);
     });
     this.writeChains.set(sessionId, next.catch(() => {}));
     return next;

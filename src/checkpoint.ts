@@ -64,8 +64,13 @@ export class FileCheckpointStore implements RunCheckpointStore {
   }
 
   async save(checkpoint: RunCheckpoint): Promise<void> {
-    const { writeFile } = await import("node:fs/promises");
-    await writeFile(await this.pathFor(checkpoint.runId), JSON.stringify(checkpoint, null, 2), "utf-8");
+    const { writeFile, rename } = await import("node:fs/promises");
+    const path = await this.pathFor(checkpoint.runId);
+    // Write to a temp file then rename over the real one — atomic on the same
+    // filesystem, so a crash mid-write can't leave a truncated/corrupt checkpoint.
+    const tmp = `${path}.tmp`;
+    await writeFile(tmp, JSON.stringify(checkpoint, null, 2), "utf-8");
+    await rename(tmp, path);
   }
 
   async load(runId: string): Promise<RunCheckpoint | null> {

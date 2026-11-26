@@ -213,7 +213,7 @@ console.log("✅ TEST 3 passed\n");
 // ===========================================================================
 console.log("=== TEST 4: FileCheckpointStore persists to a real file ===");
 
-const { rmSync } = await import("node:fs");
+const { rmSync, readdirSync } = await import("node:fs");
 const dir = "./__checkpoint_test_dir";
 rmSync(dir, { recursive: true, force: true });
 
@@ -238,6 +238,11 @@ console.log(`  reloaded from a new store instance: ${loaded !== null}`);
 if (!loaded) throw new Error("FileCheckpointStore did not persist across instances");
 console.log(`  loaded.agentName: "${loaded.agentName}" (expected "worker")`);
 if (loaded.agentName !== "worker") throw new Error("Loaded checkpoint data is wrong");
+
+// Atomic write: save() must leave no `.tmp` file behind (temp + rename).
+const leftoverTmp = readdirSync(dir).filter((f) => f.endsWith(".tmp"));
+console.log(`  no leftover .tmp after save: ${leftoverTmp.length === 0}`);
+if (leftoverTmp.length !== 0) throw new Error("save() left a .tmp file behind — write was not atomic");
 
 await fileStore2.delete("file-run-1");
 const afterDelete = await fileStore2.load("file-run-1");

@@ -1,4 +1,4 @@
-import { rmSync, mkdtempSync } from "node:fs";
+import { rmSync, mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RedisSessionStore, SqliteSessionStore, FileSessionStore, createSession } from "../src/index.js";
@@ -136,6 +136,9 @@ try {
   const fileMsgs = await fileSession.getMessages();
   console.log(`  file store message count after 3 concurrent appends: ${fileMsgs.length} (expected 3)`);
   if (fileMsgs.length !== 3) throw new Error("FileSessionStore lost messages under concurrent appends");
+  const leftoverTmp = readdirSync(tempDir).filter((f) => f.endsWith(".tmp"));
+  console.log(`  no leftover .tmp after appends: ${leftoverTmp.length === 0}`);
+  if (leftoverTmp.length !== 0) throw new Error("FileSessionStore left a .tmp file behind — write was not atomic");
 } finally {
   rmSync(tempDir, { recursive: true, force: true });
 }
