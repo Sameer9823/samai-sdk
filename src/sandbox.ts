@@ -136,6 +136,10 @@ function spawnAndCollect(
           }
         }
       }
+      // Safety net: if "close" hasn't fired within ~1s of the kill (e.g. a
+      // grandchild still holds the stdout/stderr pipe open), resolve anyway so a
+      // timeout can never hang the caller.
+      setTimeout(() => finish(null), 1000);
     }, opts.timeoutMs);
 
     child.stdout?.on("data", (chunk: Buffer) => {

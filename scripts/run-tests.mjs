@@ -42,6 +42,7 @@ const files = [
   "sandbox-usage-test",
   "sandbox-timeout-group-mock-test",
   "code-execution-timeout-mock-test",
+  "sandbox-timeout-fallback-mock-test",
   "voice-usage-test",
   "graph-memory-mock-test",
   "graph-memory-cypher-guard-mock-test",
