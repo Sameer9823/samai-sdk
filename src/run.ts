@@ -173,6 +173,14 @@ async function* runLoop<TOutput>(
       const toolCalls: ToolCallPart[] = [];
       let usage: Usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
+      // When output guardrails are configured (agent- or client-level), hold the
+      // streamed text until they've checked it, then emit it once — so a consumer
+      // never sees text that a guardrail might block or rewrite. Without output
+      // guardrails, keep streaming live.
+      const hasOutputGuardrails =
+        (currentAgent.guardrails?.output?.length ?? 0) > 0 || client.outputGuardrails.length > 0;
+      let heldText = "";
+
       // Resilience wrappers (withRetry/withFallback/withTimeout, if the provider passed to
       // createClient() was built with createResilientProvider()) fire these hooks from inside
       // their own retry loop, which runs before any chunk is yielded to us — a generator can
@@ -206,7 +214,11 @@ async function* runLoop<TOutput>(
       })) {
         if (chunk.type === "text-delta") {
           text += chunk.textDelta;
-          yield { type: "text-delta", textDelta: chunk.textDelta, agentName: currentAgent.name };
+          if (hasOutputGuardrails) {
+            heldText += chunk.textDelta;
+          } else {
+            yield { type: "text-delta", textDelta: chunk.textDelta, agentName: currentAgent.name };
+          }
         } else if (chunk.type === "tool-call") {
           toolCalls.push(chunk.toolCall);
         } else if (chunk.type === "finish") {
@@ -217,6 +229,13 @@ async function* runLoop<TOutput>(
       }
 
       for (const event of resilienceEvents) yield event;
+
+      // A tool/handoff turn has no final answer, so output guardrails don't run on
+      // it — flush any held text now so live streaming isn't lost for those turns.
+      if (hasOutputGuardrails && heldText && toolCalls.length > 0) {
+        yield { type: "text-delta", textDelta: heldText, agentName: currentAgent.name };
+        heldText = "";
+      }
 
       addUsage(trace, usage);
       recordEvent(trace, { type: "model-call-completed", agentName: currentAgent.name, usage });
@@ -412,6 +431,12 @@ async function* runLoop<TOutput>(
           if (outcome.modifiedResult.object !== undefined) output = outcome.modifiedResult.object as TOutput;
           if (outcome.modifiedResult.text !== undefined) text = outcome.modifiedResult.text;
         }
+      }
+
+      // Output guardrails passed — emit the (possibly rewritten) text once.
+      if (hasOutputGuardrails && heldText) {
+        yield { type: "text-delta", textDelta: text, agentName: currentAgent.name };
+        heldText = "";
       }
 
       finishTrace(trace);
