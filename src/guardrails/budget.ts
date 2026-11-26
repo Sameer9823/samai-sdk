@@ -73,6 +73,11 @@ export function createBudgetGuardrail(options: BudgetGuardrailOptions = {}): Bud
   };
 
   const outputGuardrail: OutputGuardrail = ({ result }): GuardrailResult => {
+    // Fail closed: a cost budget can't be enforced for a model we can't price, so
+    // block rather than silently recording $0 and never tripping maxCostUsd.
+    if (options.maxCostUsd && !pricing[result.model]) {
+      return { allowed: false, reason: `no price for model ${result.model}, pass \`pricing\`` };
+    }
     totalTokens += result.usage.totalTokens;
     totalCostUsd += estimateCostUsd(result.model, result.usage, pricing);
     options.onUsage?.({ totalTokens, totalCostUsd, lastUsage: result.usage });

@@ -1,4 +1,4 @@
-import { createUsageLedger } from "../src/index.js";
+import { createUsageLedger, createBudgetGuardrail } from "../src/index.js";
 import type { GenerateOptions, GenerateResult, Provider, StreamChunk } from "../src/types.js";
 
 // ===========================================================================
@@ -119,5 +119,30 @@ console.log(`  reset() with no key clears everything: ${Object.keys(ledger.getAl
 if (Object.keys(ledger.getAllStats()).length !== 0) throw new Error("reset() with no args should clear all keys");
 
 console.log("✅ TEST 3 passed\n");
+
+// ===========================================================================
+// TEST 4 — an unknown model is flagged (not silently recorded as $0), and a
+// cost budget blocks instead of never tripping when the model has no price.
+// ===========================================================================
+console.log("=== TEST 4: unpriced model is flagged, budget blocks ===");
+
+const unpricedLedger = createUsageLedger();
+unpricedLedger.record("k", "totally-unknown-model", { inputTokens: 100, outputTokens: 100, totalTokens: 200 });
+const unpricedStats = unpricedLedger.getStats("k");
+console.log(`  unknown model unpricedCalls: ${unpricedStats.byModel["totally-unknown-model"].unpricedCalls} (expected 1)`);
+if (unpricedStats.byModel["totally-unknown-model"].unpricedCalls !== 1) throw new Error("unpriced model should be flagged");
+console.log(`  unknown model recorded cost: $${unpricedStats.totalCostUsd} (expected $0, but flagged)`);
+if (unpricedStats.totalCostUsd !== 0) throw new Error("unpriced model cost should be $0 but flagged");
+
+const budget = createBudgetGuardrail({ maxCostUsd: 1.0 });
+const blocked = budget.outputGuardrail({
+  result: { model: "no-such-model", text: "", toolCalls: [], finishReason: "stop", usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, messages: [], raw: null },
+});
+console.log(`  budget blocks unpriced model: ${blocked.allowed === false}`);
+if (blocked.allowed !== false) throw new Error("budget should block an unpriced model when maxCostUsd is set");
+console.log(`  block reason: ${blocked.reason}`);
+if (!blocked.reason?.includes("no price for model no-such-model")) throw new Error("block reason should name the model");
+
+console.log("✅ TEST 4 passed\n");
 
 console.log("🎉 All usage-ledger tests passed");

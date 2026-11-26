@@ -5,6 +5,8 @@ export interface UsageLedgerModelStats {
   totalTokens: number;
   totalCostUsd: number;
   callCount: number;
+  /** Calls for this model that couldn't be priced (no entry in the pricing table) — flagged rather than silently recorded as $0. */
+  unpricedCalls: number;
 }
 
 export interface UsageLedgerStats {
@@ -79,17 +81,19 @@ export function createUsageLedger(options: UsageLedgerOptions = {}): UsageLedger
   const byKey = new Map<string, UsageLedgerStats>();
 
   function record(key: string, model: string, usage: Usage): void {
-    const costUsd = estimateCallCost(model, usage, pricing);
+    const priced = pricing[model] !== undefined;
+    const costUsd = priced ? estimateCallCost(model, usage, pricing) : 0;
     const stats = byKey.get(key) ?? emptyStats();
 
     stats.totalTokens += usage.totalTokens;
     stats.totalCostUsd += costUsd;
     stats.callCount += 1;
 
-    const modelStats = stats.byModel[model] ?? { totalTokens: 0, totalCostUsd: 0, callCount: 0 };
+    const modelStats = stats.byModel[model] ?? { totalTokens: 0, totalCostUsd: 0, callCount: 0, unpricedCalls: 0 };
     modelStats.totalTokens += usage.totalTokens;
     modelStats.totalCostUsd += costUsd;
     modelStats.callCount += 1;
+    if (!priced) modelStats.unpricedCalls += 1;
     stats.byModel[model] = modelStats;
 
     byKey.set(key, stats);
