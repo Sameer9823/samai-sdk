@@ -9,8 +9,8 @@ import { RedisSessionStore, SqliteSessionStore, FileSessionStore, createSession 
 // ===========================================================================
 console.log("=== TEST 1: SqliteSessionStore persists across store instances ===");
 
-const tempDir = mkdtempSync(join(tmpdir(), "samai-sqlite-"));
-const dbPath = join(tempDir, "sessions.db");
+const sqliteTempDir = mkdtempSync(join(tmpdir(), "samai-sqlite-"));
+const dbPath = join(sqliteTempDir, "sessions.db");
 
 const sqliteStoreA = new SqliteSessionStore({ path: dbPath });
 const sessionA = createSession("user-42", sqliteStoreA);
@@ -39,12 +39,12 @@ console.log(`  after clear(): ${afterClear.length} messages (expected 0)`);
 if (afterClear.length !== 0) throw new Error("clear() did not remove the session row");
 
 try {
-  rmSync(tempDir, { recursive: true, force: true });
+  rmSync(sqliteTempDir, { recursive: true, force: true });
 } catch {
   // On some Windows versions, better-sqlite3 retains a handle briefly after all
   // store instances are dereferenced, causing EPERM. Retry after a short delay.
   await new Promise((resolve) => setTimeout(resolve, 100));
-  try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
+  try { rmSync(sqliteTempDir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
 }
 console.log("✅ TEST 1 passed (real better-sqlite3, real file on disk)\n");
 
