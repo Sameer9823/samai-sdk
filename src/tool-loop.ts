@@ -86,6 +86,7 @@ export async function executeToolCalls(
               toolName: call.toolName,
               result: `Error: blocked by tool guardrail (${outcome.reason ?? "unspecified"})`,
               isError: true,
+              blocked: true,
             };
           }
         }

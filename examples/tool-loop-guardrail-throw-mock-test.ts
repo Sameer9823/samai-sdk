@@ -46,7 +46,28 @@ async function main() {
   console.log("\n🎉 tool-loop guardrail-throw test passed");
 }
 
-main().catch((err) => {
-  console.error("FAIL:", err);
-  process.exit(1);
-});
+async function blockedFlagTest() {
+  console.log("=== TEST: a blocked tool result carries blocked:true ===");
+  const blockingGuardrail = async () => ({ allowed: false, reason: "not allowed" });
+  const results = await executeToolCalls(
+    [{ type: "tool-call", toolCallId: "c1", toolName: "echo", args: { text: "hi" } }],
+    [echo],
+    { toolGuardrails: [blockingGuardrail] }
+  );
+  check("blocked result has blocked:true", results[0]?.blocked === true);
+  check("blocked result is isError", results[0]?.isError === true);
+}
+
+main()
+  .then(blockedFlagTest)
+  .then(() => {
+    if (failures) {
+      console.log(`\n❌ ${failures} failure(s)`);
+      process.exit(1);
+    }
+    console.log("\n🎉 all tool-loop guardrail tests passed");
+  })
+  .catch((err) => {
+    console.error("FAIL:", err);
+    process.exit(1);
+  });

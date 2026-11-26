@@ -350,8 +350,11 @@ async function* runLoop<TOutput>(
         for (const event of queuedEvents) yield event;
 
         for (const r of toolResults) {
-          if (r.isError && typeof r.result === "string" && /blocked by tool guardrail/.test(r.result)) {
-            const reason = r.result.replace(/^Error: blocked by tool guardrail \(/, "").replace(/\)$/, "");
+          if (r.blocked) {
+            const reason =
+              typeof r.result === "string"
+                ? r.result.replace(/^Error: blocked by tool guardrail \(/, "").replace(/\)$/, "")
+                : "unspecified";
             recordEvent(trace, { type: "guardrail-triggered", stage: "tool", agentName: currentAgent.name, reason });
             yield { type: "guardrail-triggered", stage: "tool", agentName: currentAgent.name, reason };
           }

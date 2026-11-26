@@ -29,6 +29,8 @@ export interface ToolResultPart {
   toolName: string;
   result: unknown;
   isError?: boolean;
+  /** True when a tool guardrail blocked this call (result carries the reason). Lets the run loop detect blocks without string-matching the message. */
+  blocked?: boolean;
 }
 
 export type ContentPart = TextPart | ImagePart | ToolCallPart | ToolResultPart;
