@@ -46,7 +46,8 @@ export class RedisSessionStore implements SessionStore {
   private async connect(url?: string): Promise<MinimalRedisClient> {
     let IORedis: new (connectionString: string) => MinimalRedisClient;
     try {
-      ({ default: IORedis } = await import("ioredis"));
+      const mod = await import("ioredis");
+      IORedis = mod.default as unknown as new (connectionString: string) => MinimalRedisClient;
     } catch (err) {
       throw new Error(
         "RedisSessionStore requires the optional `ioredis` package. Install it with `npm install ioredis`.",
