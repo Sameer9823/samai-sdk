@@ -416,10 +416,13 @@ async function* runLoop<TOutput>(
 
       finishTrace(trace);
       recordEvent(trace, { type: "run-completed" });
-      yield { type: "run-completed", output, text, usage: trace.totalUsage };
 
+      // Persist BEFORE yielding run-completed: a consumer that breaks on that
+      // event must not lose the turn's messages or leave a stale checkpoint.
       await session.appendMessages(messages.slice(newMessagesStart));
       if (checkpointConfig) await checkpointConfig.store.delete(runId);
+
+      yield { type: "run-completed", output, text, usage: trace.totalUsage };
 
       return { runId, output, text, finalAgent: currentAgent.name, messages, trace };
     }
