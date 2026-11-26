@@ -59,6 +59,13 @@ if (typeof pkg.dependencies["zod"] !== "string") throw new Error("Scaffolded pro
 console.log(`  openai provider SDK present for groq: ${typeof pkg.dependencies["openai"] === "string"}`);
 if (typeof pkg.dependencies["openai"] !== "string") throw new Error("Scaffolded project is missing the openai provider SDK for --provider groq");
 
+// Regression: providers with an envVar must scaffold start/dev scripts that load
+// .env via tsx --env-file, otherwise `npm start` never sees the API key.
+console.log(`  start script loads .env: ${pkg.scripts.start === "tsx --env-file=.env src/index.ts"}`);
+if (pkg.scripts.start !== "tsx --env-file=.env src/index.ts") throw new Error(`start script should load .env, got: ${pkg.scripts.start}`);
+console.log(`  dev script loads .env: ${pkg.scripts.dev === "tsx watch --env-file=.env src/index.ts"}`);
+if (pkg.scripts.dev !== "tsx watch --env-file=.env src/index.ts") throw new Error(`dev script should load .env, got: ${pkg.scripts.dev}`);
+
 // Regression: scaffold README must point at the real repo (github.com/Sameer9823/samai-sdk),
 // not the stale github.com/SamAI/samai-sdk org that 404s.
 const readme = readFileSync(join(projectDir, "README.md"), "utf8");

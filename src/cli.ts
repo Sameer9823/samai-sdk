@@ -80,6 +80,11 @@ const PROVIDER_SNIPPETS: Record<ParsedArgs["provider"], { import: string; setup:
 
 function packageJson(target: string, provider: ParsedArgs["provider"]): string {
   const dep = PROVIDER_DEP[provider];
+  // Providers that need an API key read it from .env — load it via tsx's --env-file
+  // so `npm start` actually sees the key. Ollama has no .env, so leave it plain.
+  const hasEnv = PROVIDER_SNIPPETS[provider].envVar !== null;
+  const startScript = hasEnv ? "tsx --env-file=.env src/index.ts" : "tsx src/index.ts";
+  const devScript = hasEnv ? "tsx watch --env-file=.env src/index.ts" : "tsx watch src/index.ts";
   const dependencies: Record<string, string> = {
     [`samai-sdk`]: `^${SDK_VERSION}`,
     zod: "^3.23.8",
@@ -92,8 +97,8 @@ function packageJson(target: string, provider: ParsedArgs["provider"]): string {
       private: true,
       type: "module",
       scripts: {
-        start: "tsx src/index.ts",
-        dev: "tsx watch src/index.ts",
+        start: startScript,
+        dev: devScript,
       },
       dependencies,
       devDependencies: {
